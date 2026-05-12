@@ -16,7 +16,8 @@ const envSchema = z.object({
     ENCRYPTION_KEY: z.string(),
     TERMII_BASE_URL: z.string().default("https://v3.api.termii.com"),
     TERMII_API_KEY: z.string(),
-    TERMII_SECRET_KEY: z.string()
+    TERMII_SECRET_KEY: z.string(),
+    RESEND_API_KEY: z.string(),
 });
 
 export const env = envSchema.parse(process.env);

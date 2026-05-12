@@ -1,0 +1,1 @@
+{"version":3,"file":"auth.router.js","sourceRoot":"","sources":["../../../src/modules/auth/auth.router.ts"],"names":[],"mappings":";;AAAA,qCAAiC;AACjC,uDAAyD;AACzD,gDAA6D;AAE7D,MAAM,MAAM,GAAG,IAAA,gBAAM,GAAE,CAAC;AAExB,MAAM,CAAC,IAAI,CAAC,WAAW,EAAE,2BAAoB,EAAE,+BAAa,CAAC,CAAC;AAC9D,MAAM,CAAC,IAAI,CAAC,QAAQ,EAAE,uBAAK,CAAC,CAAC;AAE7B,kBAAe,MAAM,CAAC"}

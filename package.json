@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
     "dev": "ts-node-dev src/app.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -21,6 +23,7 @@
     "mongoose": "^9.6.1",
     "multer": "^2.1.1",
     "node-cron": "^4.2.1",
+    "resend": "^6.12.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

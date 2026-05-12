@@ -1,23 +1,17 @@
-import { sendEmail } from './emailService';
-
-export async function sendVerificationRequestNotification(payload: {
-    recipientEmail?: string;
-    recipientPhone?: string;
-    requestCode: string;
-    institutionName: string;
-    paymentAmount: number;
-    expiresAt: Date;
-}) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sendVerificationRequestNotification = sendVerificationRequestNotification;
+exports.sendSessionInviteNotification = sendSessionInviteNotification;
+const emailService_1 = require("./emailService");
+async function sendVerificationRequestNotification(payload) {
     const link = `${process.env.APP_URL}/verify/${payload.requestCode}`;
     const message = `${payload.institutionName} wants to pay you ₦${payload.paymentAmount.toLocaleString()}. Verify your business securely at VendorProof to receive payment. Link: ${link} (expires ${payload.expiresAt.toLocaleString()})`;
-
     if (payload.recipientPhone) {
         // await termii.sendSms(payload.recipientPhone, message);
         console.log(`[SMS] → ${payload.recipientPhone}: ${message}`);
     }
-
     if (payload.recipientEmail) {
-        await sendEmail({
+        await (0, emailService_1.sendEmail)({
             to: payload.recipientEmail,
             subject: 'Payment Verification Request - VendorProof',
             html: `
@@ -37,25 +31,14 @@ export async function sendVerificationRequestNotification(payload: {
         console.log(`[EMAIL] → ${payload.recipientEmail}: ${message}`);
     }
 }
-
-export async function sendSessionInviteNotification(payload: {
-    recipientPhone?: string;
-    recipientEmail?: string;
-    sessionCode: string;
-    initiatorName: string;
-    amount: number;
-    description: string;
-    expiresAt: Date;
-}) {
+async function sendSessionInviteNotification(payload) {
     const link = `${process.env.APP_URL}/session/${payload.sessionCode}`;
     const message = `${payload.initiatorName} wants to send you ₦${payload.amount.toLocaleString()} for "${payload.description}". Both parties verify identity first. Join here: ${link} (expires in 2 hours)`;
-
     if (payload.recipientPhone) {
         console.log(`[SMS] → ${payload.recipientPhone}: ${message}`);
     }
-
     if (payload.recipientEmail) {
-        await sendEmail({
+        await (0, emailService_1.sendEmail)({
             to: payload.recipientEmail,
             subject: 'Secure Payment Session Invitation - VendorProof',
             html: `
@@ -75,3 +58,4 @@ export async function sendSessionInviteNotification(payload: {
         });
     }
 }
+//# sourceMappingURL=notificationService.js.map
