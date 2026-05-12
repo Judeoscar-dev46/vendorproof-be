@@ -1,0 +1,4 @@
+src/modules/wallet/wallet.controller.ts(36,50): error TS2379: Argument of type '{ accountNumber?: string; ownerId: string; ownerType: "individual" | "institution"; address: string; gender: "male" | "female"; bvn?: string | undefined; dob?: string | undefined; email?: string | undefined; }' is not assignable to parameter of type 'WalletData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'bvn' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
