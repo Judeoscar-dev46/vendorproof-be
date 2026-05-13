@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
-import { Vendor } from '../models/vendor.model';
+import { VendorProfile } from '../models/vendorProfile.model';
 import { env } from '../config/env';
+import { encrypt } from '../utils/crypto';
 
 const nigerianBanks = [
     { code: '044', name: 'Access Bank' },
@@ -20,13 +21,14 @@ function generateVendor(isFraud = false) {
     const base = {
         companyName: `${['Alpha', 'Beta', 'Delta', 'Omega'][Math.floor(Math.random() * 4)]} ${['Solutions', 'Ventures', 'Services', 'Enterprises'][Math.floor(Math.random() * 4)]} Ltd`,
         rcNumber: `RC${Math.floor(100000 + Math.random() * 899999)}`,
-        directorBvn: `${Math.floor(10000000000 + Math.random() * 89999999999)}`,
+        directorBvn: encrypt(`${Math.floor(10000000000 + Math.random() * 89999999999)}`),
         bankAccount: `${Math.floor(1000000000 + Math.random() * 8999999999)}`,
         bankCode: bank?.code,
         address: `${Math.floor(1 + Math.random() * 200)} ${['Marina', 'Broad St', 'Adeola Odeku', 'Victoria Island'][Math.floor(Math.random() * 4)]}, Lagos`,
         registrationDate: randomDate(8),
         contactEmail: `vendor${Math.floor(Math.random() * 9999)}@example.com`,
-        status: 'pending' as const,
+        phoneNumber: `080${Math.floor(10000000 + Math.random() * 89999999)}`,
+        verificationStatus: 'unverified' as const,
     };
 
     if (!isFraud) return base;
@@ -42,14 +44,14 @@ function generateVendor(isFraud = false) {
 
 async function seed() {
     await mongoose.connect(env.MONGODB_URI);
-    await Vendor.deleteMany({});
+    await VendorProfile.deleteMany({});
 
     const vendors = [
         ...Array.from({ length: 80 }, () => generateVendor(false)),
         ...Array.from({ length: 20 }, () => generateVendor(true)),
     ];
 
-    await Vendor.insertMany(vendors);
+    await VendorProfile.insertMany(vendors);
     console.log(`Seeded ${vendors.length} vendors (80 clean, 20 fraudulent)`);
     await mongoose.disconnect();
 }

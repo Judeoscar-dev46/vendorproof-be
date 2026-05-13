@@ -1,4 +1,4 @@
-import { Vendor } from '../models/vendor.model';
+import { VendorProfile } from '../models/vendorProfile.model';
 import { IndividualProfile } from '../models/individualProfile.model';
 
 export interface NetworkResult {
@@ -33,13 +33,13 @@ async function analyseVendorNetwork(
         flags.push(flag);
     };
 
-    const sharedBankVendors = await Vendor.find({
+    const sharedBankVendors = await VendorProfile.find({
         bankAccount,
         _id: { $ne: vendorId },
-    }).select('companyName status');
+    }).select('companyName verificationStatus');
 
     if (sharedBankVendors.length > 0) {
-        const blockedCount = sharedBankVendors.filter(v => v.status === 'blocked').length;
+        const blockedCount = sharedBankVendors.filter(v => v.verificationStatus === 'blocked').length;
         if (blockedCount > 0) {
             applyPenalty(40, `Bank account shared with ${blockedCount} previously blocked vendor(s): ${sharedBankVendors.map(v => v.companyName).join(', ')}`);
         } else {
@@ -47,7 +47,9 @@ async function analyseVendorNetwork(
         }
     }
 
-    const sharedBvnVendors = await Vendor.find({
+    // NOTE: Shared BVN check won't work with random IV encryption unless we use a hash field.
+    // Keeping logic but it will likely find 0 matches for now.
+    const sharedBvnVendors = await VendorProfile.find({
         directorBvn,
         _id: { $ne: vendorId },
     });
@@ -57,7 +59,7 @@ async function analyseVendorNetwork(
     }
 
     if (address) {
-        const sharedAddressVendors = await Vendor.find({
+        const sharedAddressVendors = await VendorProfile.find({
             address: { $regex: address.substring(0, 20), $options: 'i' },
             _id: { $ne: vendorId },
         });

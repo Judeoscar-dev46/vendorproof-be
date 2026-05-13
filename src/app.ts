@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import mongoose from 'mongoose';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
@@ -15,7 +16,13 @@ import verificationRequestRouter from './modules/verificationRequest/verificatio
 import transactionSessionRouter from './modules/transactionSession/transactionSession.router';
 
 const app = express();
-app.use(express.json());
+
+app.use(cors({
+    origin: '*',
+    credentials: true,
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/api/auth', authRouter);
 app.use('/api/vendors', vendorRouter);

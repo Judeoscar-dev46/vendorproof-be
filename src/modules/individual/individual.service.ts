@@ -2,6 +2,8 @@ import bcrypt from 'bcrypt';
 import { encrypt } from '../../utils/crypto';
 import { IndividualProfile, IIndividualProfile } from '../../models/individualProfile.model';
 import { Verification } from '../../models/verification.model';
+import { runIndividualVerification } from '../../ai/orchestrator';
+import { SupportedMediaType } from '../../ai/documentAnalyser';
 
 export interface CreateIndividualProfileDTO {
     fullName: string;
@@ -66,6 +68,58 @@ export async function updateIndividualProfile(
 
     await profile.save();
     return profile;
+}
+
+export async function verifyIndividualProfileStandAlone(
+    id: string,
+    documentBase64: string,
+    mediaType: SupportedMediaType
+) {
+    const profile = await IndividualProfile.findById(id).select('+bvn +ninNumber +bankAccount');
+    if (!profile) throw new Error('Individual profile not found');
+
+    if (profile.lastVerifiedAt) {
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        if (profile.lastVerifiedAt > oneDayAgo) {
+            throw new Error('You can only perform identity verification once every 24 hours');
+        }
+    }
+
+    const result = await runIndividualVerification(profile, documentBase64, mediaType);
+
+    await IndividualProfile.findByIdAndUpdate(id, {
+        trustScore: result.trustScore,
+        verificationStatus: result.verdict,
+        lastVerifiedAt: new Date(),
+        internalFlags: result.allFlags,
+    });
+
+    return result;
+}
+
+export async function hasValidVerification(id: string): Promise<{ valid: boolean; trustScore?: number; verdict?: 'trusted' | 'review' | 'blocked'; verificationId?: string | undefined }> {
+    const profile = await IndividualProfile.findById(id);
+    if (!profile || profile.verificationStatus !== 'trusted' || !profile.lastVerifiedAt) {
+        return { valid: false };
+    }
+
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    if (profile.lastVerifiedAt < ninetyDaysAgo) {
+        return { valid: false };
+    }
+
+    const latestVerification = await Verification.findOne({
+        subjectId: id,
+        subjectType: 'individual',
+        verdict: 'trusted',
+    }).sort({ createdAt: -1 });
+
+    return {
+        valid: true,
+        trustScore: profile.trustScore ?? 0,
+        verdict: profile.verificationStatus as 'trusted' | 'review' | 'blocked',
+        verificationId: latestVerification ? String(latestVerification._id) : undefined,
+    };
 }
 
 export async function getIndividualVerificationHistory(id: string) {

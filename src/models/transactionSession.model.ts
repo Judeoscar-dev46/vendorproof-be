@@ -35,6 +35,15 @@ export interface ITransactionSession extends Document {
     paymentReleasedAt?: Date;
     blockedReason?: string;
     expiresAt: Date;
+    guestDetails?: {
+        fullName: string;
+        phoneNumber: string;
+        bvn?: string;
+        bankAccount?: string;
+        bankCode?: string;
+        dateOfBirth?: Date;
+    };
+    guestToken?: string;
     createdAt: Date;
 }
 
@@ -69,6 +78,15 @@ const TransactionSessionSchema = new Schema<ITransactionSession>({
     paymentReleasedAt: Date,
     blockedReason: String,
     expiresAt: { type: Date, required: true },
+    guestDetails: {
+        fullName: String,
+        phoneNumber: String,
+        bvn: String,
+        bankAccount: String,
+        bankCode: String,
+        dateOfBirth: Date,
+    },
+    guestToken: String,
 }, { timestamps: true });
 
 TransactionSessionSchema.index({ initiatorProfileId: 1 });

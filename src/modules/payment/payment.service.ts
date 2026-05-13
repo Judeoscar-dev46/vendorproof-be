@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import { env } from '../../config/env';
 import { Verification } from '../../models/verification.model';
 import { VerificationRequest } from '../../models/verificationRequest.model';
-import { Vendor } from '../../models/vendor.model';
 import { AuditLog } from '../../models/auditLog.model';
 import { creditWalletByVirtualAccount } from '../wallet/wallet.service'
 import { VendorProfile } from '../../models/vendorProfile.model';
@@ -50,10 +49,10 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
         );
     }
 
-    const vendor = await Vendor.findById(verification.vendorId);
+    const vendor = await VendorProfile.findById(verification.vendorId);
     if (!vendor) throw new Error('Vendor not found');
 
-    if (vendor.status === 'blocked') {
+    if (vendor.verificationStatus === 'blocked') {
         throw new Error('Payment blocked: vendor account has been blocked since this verification was run');
     }
 

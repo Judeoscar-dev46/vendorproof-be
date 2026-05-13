@@ -1,8 +1,10 @@
 import crypto from 'crypto';
 import { TransactionSession, ITransactionSession } from '../../models/transactionSession.model';
 import { IndividualProfile } from '../../models/individualProfile.model';
-import { runIndividualVerification } from '../../ai/orchestrator';
+import { hasValidVerification } from '../individual/individual.service';
+import { runIndividualVerification, runGuestIndividualVerification } from '../../ai/orchestrator';
 import { sendSessionInviteNotification } from '../../notifications/notificationService';
+import { Verification } from '../../models/verification.model';
 import { lookupAccount, fundTransfer } from '../payment/payment.service';
 import { getWalletByOwner, debitWallet } from '../wallet/wallet.service';
 import { AuditLog } from '../../models/auditLog.model';
@@ -25,6 +27,9 @@ export async function createTransactionSession(
     const sessionCode = `VP-${crypto.randomBytes(2).toString('hex').toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
 
+    // Check if initiator is already verified
+    const vCheck = await hasValidVerification(initiatorProfileId);
+
     const session = await TransactionSession.create({
         sessionCode,
         initiatorProfileId,
@@ -33,6 +38,12 @@ export async function createTransactionSession(
         expiresAt,
         ...(dto.recipientPhone !== undefined && { recipientPhone: dto.recipientPhone }),
         ...(dto.recipientEmail !== undefined && { recipientEmail: dto.recipientEmail }),
+        ...(vCheck.valid && {
+            initiatorVerificationId: vCheck.verificationId as any,
+            initiatorTrustScore: vCheck.trustScore,
+            initiatorVerdict: vCheck.verdict,
+            status: 'initiator_verified',
+        }),
     });
 
     const initiator = await IndividualProfile.findById(initiatorProfileId);
@@ -57,7 +68,7 @@ export async function joinTransactionSession(
     const session = await TransactionSession.findOne({ sessionCode });
     if (!session) throw new Error('Session not found');
     if (session.status === 'expired') throw new Error('Session has expired');
-    if (session.status !== 'awaiting_recipient') {
+    if (session.status !== 'awaiting_recipient' && session.status !== 'initiator_verified') {
         throw new Error('Session is no longer accepting participants');
     }
 
@@ -65,12 +76,81 @@ export async function joinTransactionSession(
         throw new Error('You cannot join your own payment session');
     }
 
+    // Check if recipient is already verified
+    const vCheck = await hasValidVerification(recipientProfileId);
+
+    const update: Partial<ITransactionSession> = {
+        recipientProfileId: recipientProfileId as any,
+    };
+
+    if (vCheck.valid && vCheck.trustScore !== undefined && vCheck.verdict !== undefined) {
+        update.recipientVerificationId = vCheck.verificationId as any;
+        update.recipientTrustScore = vCheck.trustScore;
+        update.recipientVerdict = vCheck.verdict;
+        update.status = (session.initiatorVerificationId) ? 'both_verified' : 'recipient_verified';
+    } else {
+        update.status = (session.status === 'initiator_verified') ? 'initiator_verified' : 'both_verifying';
+    }
+
+    const updatedSession = await TransactionSession.findByIdAndUpdate(session._id, update, { new: true });
+    if (!updatedSession) throw new Error('Failed to update session');
+
+    if (updatedSession.status === 'both_verified') {
+        await evaluateSessionOutcome(updatedSession);
+    }
+
+    return updatedSession;
+}
+export async function getSessionDetails(sessionCode: string) {
+    const session = await TransactionSession.findOne({ sessionCode }).populate('initiatorProfileId', 'fullName');
+    if (!session) throw new Error('Session not found');
+
+    const initiator = session.initiatorProfileId as any;
+
+    return {
+        sessionCode: session.sessionCode,
+        amount: session.amount,
+        description: session.description,
+        initiatorName: initiator?.fullName ?? 'Someone',
+        expiresAt: session.expiresAt,
+        status: session.status,
+    };
+}
+
+export async function joinTransactionSessionAsGuest(
+    sessionCode: string,
+    guestDetails: {
+        fullName: string;
+        phoneNumber: string;
+    }
+) {
+    const session = await TransactionSession.findOne({ sessionCode });
+    if (!session) throw new Error('Session not found');
+    if (session.status === 'expired') throw new Error('Session has expired');
+    if (session.status !== 'awaiting_recipient' && session.status !== 'initiator_verified') {
+        throw new Error('This session is no longer accepting participants');
+    }
+
+    const existingProfile = await IndividualProfile.findOne({ phoneNumber: guestDetails.phoneNumber });
+
+    if (existingProfile) {
+        return joinTransactionSession(sessionCode, String(existingProfile._id));
+    }
+
+    const guestToken = crypto.randomBytes(32).toString('hex');
+
     await TransactionSession.findByIdAndUpdate(session._id, {
-        recipientProfileId,
-        status: 'both_verifying',
+        status: session.status === 'initiator_verified' ? 'initiator_verified' : 'both_verifying',
+        'guestDetails.fullName': guestDetails.fullName,
+        'guestDetails.phoneNumber': guestDetails.phoneNumber,
+        guestToken,
     });
 
-    return session;
+    return {
+        isGuest: true,
+        guestToken,
+        message: 'Joined as guest — proceed to identity verification',
+    };
 }
 
 export async function submitSessionVerification(
@@ -95,10 +175,10 @@ export async function submitSessionVerification(
     }
 
     if (isInitiator && session.initiatorVerificationId) {
-        throw new Error('You have already submitted verification for this session');
+        return { message: 'You are already verified for this session', status: session.status };
     }
     if (isRecipient && session.recipientVerificationId) {
-        throw new Error('You have already submitted verification for this session');
+        return { message: 'You are already verified for this session', status: session.status };
     }
 
     const profile = await IndividualProfile
@@ -127,14 +207,14 @@ export async function submitSessionVerification(
         update.initiatorVerificationId = result.verificationId;
         update.initiatorTrustScore = result.trustScore;
         update.initiatorVerdict = result.verdict;
-        update.status = session.recipientVerificationId
+        update.status = (session.recipientVerificationId || update.recipientVerificationId)
             ? 'both_verified'
             : 'initiator_verified';
     } else {
         update.recipientVerificationId = result.verificationId;
         update.recipientTrustScore = result.trustScore;
         update.recipientVerdict = result.verdict;
-        update.status = session.initiatorVerificationId
+        update.status = (session.initiatorVerificationId || update.initiatorVerificationId)
             ? 'both_verified'
             : 'recipient_verified';
     }
@@ -234,17 +314,63 @@ export async function giveSessionConsent(
     return { consented: true, status: update.status };
 }
 
+export async function giveSessionConsentAsGuest(
+    sessionCode: string,
+    guestToken: string
+) {
+    const session = await TransactionSession.findOne({ sessionCode, guestToken });
+    if (!session) throw new Error('Session not found or invalid guest token');
+
+    if (!['awaiting_both_consent', 'awaiting_recipient_consent']
+        .includes(session.status)) {
+        throw new Error(`Cannot consent at this stage: ${session.status}`);
+    }
+
+    const update: Record<string, unknown> = { recipientConsented: true };
+
+    const initiatorNowConsented = session.initiatorConsented;
+    const recipientNowConsented = true;
+
+    if (initiatorNowConsented && recipientNowConsented) {
+        update.status = 'payment_released';
+    } else {
+        update.status = 'awaiting_initiator_consent';
+    }
+
+    await TransactionSession.findByIdAndUpdate(session._id, update);
+
+    if (initiatorNowConsented && recipientNowConsented) {
+        await releaseSessionPayment(sessionCode);
+    }
+
+    return { consented: true, status: update.status };
+}
+
 async function releaseSessionPayment(sessionCode: string) {
     const session = await TransactionSession.findOne({ sessionCode })
         .populate('recipientProfileId');
 
     if (!session) throw new Error('Session not found');
 
-    const recipient = await IndividualProfile
-        .findById(session.recipientProfileId)
-        .select('+bankAccount');
+    let bankAccount: string;
+    let bankCode: string;
+    let fullName: string;
 
-    if (!recipient) throw new Error('Recipient profile not found');
+    if (session.recipientProfileId) {
+        const recipient = await IndividualProfile
+            .findById(session.recipientProfileId)
+            .select('+bankAccount');
+        if (!recipient) throw new Error('Recipient profile not found');
+        bankAccount = recipient.bankAccount;
+        bankCode = recipient.bankCode;
+        fullName = recipient.fullName;
+    } else if (session.guestDetails && session.guestDetails.bankAccount && session.guestDetails.bankCode) {
+        bankAccount = session.guestDetails.bankAccount;
+        bankCode = session.guestDetails.bankCode;
+        fullName = session.guestDetails.fullName;
+    } else {
+        throw new Error('Recipient identity details missing');
+    }
 
     const initiator = await IndividualProfile.findById(session.initiatorProfileId);
     if (!initiator) throw new Error('Initiator profile not found');
@@ -256,14 +382,14 @@ async function releaseSessionPayment(sessionCode: string) {
         );
     }
 
-    const resolvedAccount = await lookupAccount(recipient.bankCode, recipient.bankAccount);
+    const resolvedAccount = await lookupAccount(bankCode, bankAccount);
 
-    const firstName = recipient.fullName.toLowerCase().split(' ')[0] ?? '';
+    const firstName = fullName.toLowerCase().split(' ')[0] ?? '';
     const nameMatch = resolvedAccount.account_name.toLowerCase().includes(firstName);
 
     if (!nameMatch) {
         throw new Error(
-            `Account name mismatch: profile name "${recipient.fullName}" vs bank name "${resolvedAccount.account_name}"`
+            `Account name mismatch: provided name "${fullName}" vs bank name "${resolvedAccount.account_name}"`
         );
     }
 
@@ -273,8 +399,8 @@ async function releaseSessionPayment(sessionCode: string) {
     await fundTransfer({
         transactionReference: transactionRef,
         amount: session.amount,
-        bankCode: recipient.bankCode,
-        accountNumber: recipient.bankAccount,
+        bankCode: bankCode,
+        accountNumber: bankAccount,
         accountName: resolvedAccount.account_name,
         remark: `VendorProof P2P | Session: ${sessionCode} | From: ${initiator.fullName}`,
     });
@@ -332,5 +458,69 @@ export async function getSessionStatus(sessionCode: string, profileId: string) {
         squadTransactionRef: session.status === 'payment_released'
             ? session.squadTransactionRef
             : undefined,
+    };
+}
+
+export async function submitSessionVerificationAsGuest(
+    sessionCode: string,
+    guestToken: string,
+    guestData: {
+        fullName: string;
+        dateOfBirth: string;
+        bvn: string;
+        bankAccount: string;
+        bankCode: string;
+        phoneNumber: string;
+        ninNumber?: string;
+    },
+    documentBase64: string,
+    mediaType: SupportedMediaType
+) {
+    const session = await TransactionSession.findOne({ sessionCode, guestToken });
+    if (!session) throw new Error('Session not found or invalid guest token');
+
+    if (new Date() > session.expiresAt) {
+        await TransactionSession.findByIdAndUpdate(session._id, { status: 'expired' });
+        throw new Error('Session has expired');
+    }
+
+    if (session.recipientVerificationId) {
+        throw new Error('Verification already submitted for this session');
+    }
+
+    const result = await runGuestIndividualVerification(
+        {
+            ...guestData,
+            dateOfBirth: new Date(guestData.dateOfBirth),
+        },
+        documentBase64,
+        mediaType,
+        session.amount
+    );
+
+    // Update session with guest results
+    await TransactionSession.findByIdAndUpdate(session._id, {
+        recipientVerificationId: result.verificationId,
+        recipientTrustScore: result.trustScore,
+        recipientVerdict: result.verdict,
+        status: session.initiatorVerificationId ? 'both_verified' : 'recipient_verified',
+        'guestDetails.fullName': guestData.fullName,
+        'guestDetails.phoneNumber': guestData.phoneNumber,
+        'guestDetails.bvn': guestData.bvn,
+        'guestDetails.bankAccount': guestData.bankAccount,
+        'guestDetails.bankCode': guestData.bankCode,
+        'guestDetails.dateOfBirth': new Date(guestData.dateOfBirth),
+    });
+
+    const updatedSession = await TransactionSession.findById(session._id);
+    if (updatedSession?.status === 'both_verified') {
+        await evaluateSessionOutcome(updatedSession);
+    }
+
+    return {
+        yourScore: result.trustScore,
+        yourVerdict: result.verdict,
+        sessionCode,
+        status: updatedSession?.status,
     };
 }

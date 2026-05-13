@@ -2,7 +2,7 @@ import { analyseDocument } from '../../ai/documentAnalyser';
 import { scoreAnomaly } from '../../ai/anomalyScorer';
 import { analyseNetwork } from '../../ai/networkAnalyser';
 import { aggregateScores } from '../../ai/scoreAggregator';
-import { Vendor } from '../../models/vendor.model';
+import { VendorProfile } from '../../models/vendorProfile.model';
 import { Verification } from '../../models/verification.model';
 
 export async function runVerification(
@@ -11,7 +11,7 @@ export async function runVerification(
     mediaType: 'image/jpeg' | 'image/png' | 'application/pdf',
     invoiceAmount?: number
 ) {
-    const vendor = await Vendor.findById(vendorId);
+    const vendor = await VendorProfile.findById(vendorId);
     if (!vendor) throw new Error('Vendor not found');
 
     const [docResult, anomalyResult, networkResult] = await Promise.all([
@@ -44,9 +44,9 @@ export async function runVerification(
         paymentReleased: false,
     });
 
-    await Vendor.findByIdAndUpdate(vendorId, {
-        status: aggregated.verdict,
-        latestTrustScore: aggregated.trustScore,
+    await VendorProfile.findByIdAndUpdate(vendorId, {
+        verificationStatus: aggregated.verdict,
+        trustScore: aggregated.trustScore,
     });
 
     return verification;

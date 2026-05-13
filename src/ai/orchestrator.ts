@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { analyseDocument, SupportedMediaType } from './documentAnalyser';
 import { analyseIdentityDocument } from './identityAnalyser';
 import { scoreAnomaly } from './anomalyScorer';
@@ -72,6 +73,54 @@ export async function runIndividualVerification(
 
     const verification = await Verification.create({
         subjectId: profile._id,
+        subjectType: 'individual',
+        trustScore: aggregated.trustScore,
+        verdict: aggregated.verdict,
+        subScores: aggregated.subScores,
+        flags: aggregated.allFlags,
+        claudeReasoning: identityResult.reasoning,
+        paymentReleased: false,
+    });
+
+    return { ...aggregated, verificationId: verification._id };
+}
+
+export async function runGuestIndividualVerification(
+    guestData: {
+        fullName: string;
+        dateOfBirth: Date;
+        bvn: string;
+        bankAccount: string;
+        bankCode: string;
+        phoneNumber: string;
+        ninNumber?: string;
+    },
+    documentBase64: string,
+    mediaType: SupportedMediaType,
+    transactionAmount?: number
+) {
+    // Create a mock profile with a valid ObjectId for anomaly/network analysis
+    const tempId = new mongoose.Types.ObjectId();
+    const mockProfile = {
+        _id: tempId,
+        ...guestData,
+    } as any;
+
+    const [identityResult, anomalyResult, networkResult] = await Promise.all([
+        analyseIdentityDocument(documentBase64, mediaType, {
+            fullName: guestData.fullName,
+            dateOfBirth: guestData.dateOfBirth.toISOString(),
+            bvn: guestData.bvn,
+            ...(guestData.ninNumber !== undefined && { ninNumber: guestData.ninNumber }),
+        }),
+        Promise.resolve(scoreIndividualAnomaly(mockProfile, transactionAmount)),
+        analyseNetwork(tempId.toString(), guestData.bankAccount, guestData.bvn, '', 'individual'),
+    ]);
+
+    const aggregated = aggregateIndividualScores(identityResult, anomalyResult, networkResult);
+
+    const verification = await Verification.create({
+        subjectId: undefined as any, // guest doesn't have a profile yet
         subjectType: 'individual',
         trustScore: aggregated.trustScore,
         verdict: aggregated.verdict,

@@ -1,5 +1,6 @@
-import { Vendor, IVendor } from '../../models/vendor.model';
+import { VendorProfile, IVendorProfile } from '../../models/vendorProfile.model';
 import { Verification } from '../../models/verification.model';
+import { encrypt } from '../../utils/crypto';
 
 export interface CreateVendorDTO {
     companyName: string;
@@ -10,33 +11,37 @@ export interface CreateVendorDTO {
     address: string;
     registrationDate: Date;
     contactEmail: string;
+    phoneNumber: string;
 }
 
 export interface VendorFilters {
-    status?: 'pending' | 'trusted' | 'review' | 'blocked' | undefined;
+    status?: IVendorProfile['verificationStatus'] | undefined;
     search?: string | undefined;
     page?: number | undefined;
     limit?: number | undefined;
 }
 
-export async function createVendor(dto: CreateVendorDTO): Promise<IVendor> {
-    const existing = await Vendor.findOne({ rcNumber: dto.rcNumber });
+export async function createVendor(dto: CreateVendorDTO): Promise<IVendorProfile> {
+    const existing = await VendorProfile.findOne({ rcNumber: dto.rcNumber });
     if (existing) {
         throw new Error(`A vendor with RC number ${dto.rcNumber} already exists`);
     }
 
-    const vendor = await Vendor.create(dto);
+    const vendor = await VendorProfile.create({
+        ...dto,
+        directorBvn: encrypt(dto.directorBvn),
+    });
     return vendor;
 }
 
-export async function getVendorById(id: string): Promise<IVendor> {
-    const vendor = await Vendor.findById(id);
+export async function getVendorById(id: string): Promise<IVendorProfile> {
+    const vendor = await VendorProfile.findById(id);
     if (!vendor) throw new Error('Vendor not found');
     return vendor;
 }
 
 export async function getAllVendors(filters: VendorFilters): Promise<{
-    vendors: IVendor[];
+    vendors: IVendorProfile[];
     total: number;
     page: number;
     totalPages: number;
@@ -48,7 +53,7 @@ export async function getAllVendors(filters: VendorFilters): Promise<{
     const query: Record<string, unknown> = {};
 
     if (filters.status) {
-        query.status = filters.status;
+        query.verificationStatus = filters.status;
     }
 
     if (filters.search) {
@@ -60,12 +65,12 @@ export async function getAllVendors(filters: VendorFilters): Promise<{
     }
 
     const [vendors, total] = await Promise.all([
-        Vendor.find(query)
+        VendorProfile.find(query)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
             .select('-directorBvn -bankAccount'),
-        Vendor.countDocuments(query),
+        VendorProfile.countDocuments(query),
     ]);
 
     return {
@@ -78,20 +83,20 @@ export async function getAllVendors(filters: VendorFilters): Promise<{
 
 export async function updateVendorStatus(
     id: string,
-    status: IVendor['status'],
+    status: IVendorProfile['verificationStatus'],
     reason?: string
-): Promise<IVendor> {
-    const vendor = await Vendor.findById(id);
+): Promise<IVendorProfile> {
+    const vendor = await VendorProfile.findById(id);
     if (!vendor) throw new Error('Vendor not found');
 
-    vendor.status = status;
+    vendor.verificationStatus = status;
     await vendor.save();
 
     return vendor;
 }
 
 export async function deleteVendor(id: string): Promise<void> {
-    const vendor = await Vendor.findById(id);
+    const vendor = await VendorProfile.findById(id);
     if (!vendor) throw new Error('Vendor not found');
 
     const paidVerification = await Verification.findOne({
@@ -103,12 +108,12 @@ export async function deleteVendor(id: string): Promise<void> {
         throw new Error('Cannot delete a vendor with released payments — archive instead');
     }
 
-    await Vendor.findByIdAndDelete(id);
+    await VendorProfile.findByIdAndDelete(id);
     await Verification.deleteMany({ vendorId: id });
 }
 
 export async function getVendorWithVerifications(id: string) {
-    const vendor = await Vendor.findById(id);
+    const vendor = await VendorProfile.findById(id);
     if (!vendor) throw new Error('Vendor not found');
 
     const verifications = await Verification.find({ vendorId: id })

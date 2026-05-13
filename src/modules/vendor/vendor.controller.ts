@@ -26,15 +26,16 @@ const CreateVendorSchema = z.object({
         return z.NEVER;
     }),
     contactEmail: z.string().email('Invalid email address'),
+    phoneNumber: z.string().min(10, 'Phone number is required'),
 });
 
 const UpdateStatusSchema = z.object({
-    status: z.enum(['pending', 'trusted', 'review', 'blocked']),
+    status: z.enum(['unverified', 'pending', 'trusted', 'review', 'blocked']),
     reason: z.string().optional(),
 });
 
 const VendorFiltersSchema = z.object({
-    status: z.enum(['pending', 'trusted', 'review', 'blocked']).optional(),
+    status: z.enum(['unverified', 'pending', 'trusted', 'review', 'blocked']).optional(),
     search: z.string().optional(),
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(20),

@@ -26,7 +26,7 @@ export interface IVerification extends Document {
 }
 
 const VerificationSchema = new Schema<IVerification>({
-    vendorId: { type: Schema.Types.ObjectId, ref: 'Vendor' },
+    vendorId: { type: Schema.Types.ObjectId, ref: 'VendorProfile' },
     subjectId: { type: Schema.Types.ObjectId },
     subjectType: { type: String, enum: ['vendor', 'individual'] },
     trustScore: { type: Number, required: true },

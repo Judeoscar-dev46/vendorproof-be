@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import * as IndividualService from './individual.service';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+export const uploadDocument = upload.single('document');
 
 const CreateProfileSchema = z.object({
     fullName: z.string().min(2, 'Full name is required'),
@@ -20,7 +24,7 @@ const CreateProfileSchema = z.object({
         }
         const ymdMatch = v.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
         if (ymdMatch && !isNaN(Date.parse(v))) return v;
-        
+
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid date. Use DD/MM/YYYY or YYYY-MM-DD' });
         return z.NEVER;
     }),
@@ -99,6 +103,27 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
         if (err instanceof Error && err.message.includes('not found')) {
             return fail(res, err.message, 404);
         }
+        next(err);
+    }
+}
+
+export async function verifyProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.file) {
+            return fail(res, 'Identity document file is required');
+        }
+
+        const base64 = req.file.buffer.toString('base64');
+        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'application/pdf';
+
+        const result = await IndividualService.verifyIndividualProfileStandAlone(
+            req.params.id as string,
+            base64,
+            mediaType
+        );
+
+        return ok(res, result);
+    } catch (err) {
         next(err);
     }
 }

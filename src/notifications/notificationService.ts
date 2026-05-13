@@ -1,4 +1,5 @@
 import { sendEmail } from './emailService';
+import { env } from '../config/env';
 
 export async function sendVerificationRequestNotification(payload: {
     recipientEmail?: string;
@@ -8,7 +9,7 @@ export async function sendVerificationRequestNotification(payload: {
     paymentAmount: number;
     expiresAt: Date;
 }) {
-    const link = `${process.env.APP_URL}/verify/${payload.requestCode}`;
+    const link = `${env.APP}/verify/${payload.requestCode}`;
     const message = `${payload.institutionName} wants to pay you ₦${payload.paymentAmount.toLocaleString()}. Verify your business securely at VendorProof to receive payment. Link: ${link} (expires ${payload.expiresAt.toLocaleString()})`;
 
     if (payload.recipientPhone) {
@@ -47,7 +48,7 @@ export async function sendSessionInviteNotification(payload: {
     description: string;
     expiresAt: Date;
 }) {
-    const link = `${process.env.APP_URL}/session/${payload.sessionCode}`;
+    const link = `${env.APP}/session/${payload.sessionCode}`;
     const message = `${payload.initiatorName} wants to send you ₦${payload.amount.toLocaleString()} for "${payload.description}". Both parties verify identity first. Join here: ${link} (expires in 2 hours)`;
 
     if (payload.recipientPhone) {
