@@ -63,6 +63,7 @@ export const getWalletDetails = async (req: Request, res: Response, next: NextFu
 export const getWalletByOwner = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const ownerType = req.query.ownerType as string;
+        console.log(ownerType);
         if (ownerType !== 'individual' && ownerType !== 'institution') {
             return fail(res, 'ownerType must be "individual" or "institution"');
         }

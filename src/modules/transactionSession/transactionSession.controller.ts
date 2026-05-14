@@ -2,8 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import * as SessionService from './transactionSession.service';
+import { SupportedMediaType } from '../../ai/documentAnalyser';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+export const uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 }
+]);
 export const uploadDocument = upload.single('document');
 
 const CreateSessionSchema = z.object({
@@ -29,8 +34,6 @@ const VerifySessionSchema = z.object({
 
 const VerifyGuestSchema = z.object({
     guestToken: z.string().min(1, 'Guest token is required'),
-    fullName: z.string().min(2, 'Full name is required'),
-    phoneNumber: z.string().min(7, 'Phone number is required'),
     bvn: z.string().regex(/^\d{11}$/, 'BVN must be 11 digits'),
     bankAccount: z.string().regex(/^\d{10}$/, 'Account number must be 10 digits'),
     bankCode: z.string().min(3, 'Bank code is required'),
@@ -127,8 +130,13 @@ export async function joinSession(req: Request, res: Response, next: NextFunctio
 
 export async function submitVerification(req: Request, res: Response, next: NextFunction) {
     try {
-        if (!req.file) {
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+        if (!files?.document?.[0]) {
             return fail(res, 'Identity document file is required');
+        }
+        if (!files?.selfie?.[0]) {
+            return fail(res, 'Selfie image is required for face recognition');
         }
 
         const parsed = VerifySessionSchema.safeParse(req.body);
@@ -136,14 +144,16 @@ export async function submitVerification(req: Request, res: Response, next: Next
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
 
-        const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'application/pdf';
+        const docBase64 = files.document[0].buffer.toString('base64');
+        const docMediaType = files.document[0].mimetype as any;
+        const selfieBase64 = files.selfie[0].buffer.toString('base64');
 
         const result = await SessionService.submitSessionVerification(
             req.params.sessionCode as string,
             parsed.data.profileId,
-            base64,
-            mediaType
+            docBase64,
+            selfieBase64,
+            docMediaType as SupportedMediaType
         );
         return ok(res, result);
     } catch (err: unknown) {
@@ -239,8 +249,13 @@ export async function joinAsGuest(req: Request, res: Response, next: NextFunctio
 
 export async function submitVerificationAsGuest(req: Request, res: Response, next: NextFunction) {
     try {
-        if (!req.file) {
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+        if (!files?.document?.[0]) {
             return fail(res, 'Identity document file is required');
+        }
+        if (!files?.selfie?.[0]) {
+            return fail(res, 'Selfie image is required for face recognition');
         }
 
         const parsed = VerifyGuestSchema.safeParse(req.body);
@@ -248,8 +263,9 @@ export async function submitVerificationAsGuest(req: Request, res: Response, nex
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
 
-        const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as any;
+        const docBase64 = files.document[0].buffer.toString('base64');
+        const docMediaType = files.document[0].mimetype as any;
+        const selfieBase64 = files.selfie[0].buffer.toString('base64');
 
         const { guestToken, ...guestData } = parsed.data;
 
@@ -257,8 +273,9 @@ export async function submitVerificationAsGuest(req: Request, res: Response, nex
             req.params.sessionCode as string,
             guestToken,
             guestData as any,
-            base64,
-            mediaType
+            docBase64,
+            selfieBase64,
+            docMediaType as SupportedMediaType
         );
         return ok(res, result);
     } catch (err: unknown) {

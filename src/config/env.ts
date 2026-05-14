@@ -18,6 +18,7 @@ const envSchema = z.object({
     TERMII_API_KEY: z.string(),
     TERMII_SECRET_KEY: z.string(),
     RESEND_API_KEY: z.string(),
+    FACE_AI_SIDECAR_URL: z.string().default('http://localhost:8000'),
 });
 
 export const env = envSchema.parse(process.env);

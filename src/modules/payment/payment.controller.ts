@@ -24,7 +24,6 @@ export async function initiatePayment(req: Request, res: Response, next: NextFun
         if (!parsed.success) {
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
-
         const result = await PaymentService.initiatePayment(parsed.data);
         return ok(res, result, 201);
     } catch (err: unknown) {

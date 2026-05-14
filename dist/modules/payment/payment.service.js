@@ -127,6 +127,7 @@ async function getPaymentStatus(verificationId) {
         squadStatus,
     };
 }
+
 async function getVendorPayments(vendorId) {
     const vendor = await vendorProfile_model_1.VendorProfile.findById(vendorId);
     if (!vendor)
@@ -149,6 +150,7 @@ async function getVendorPayments(vendorId) {
         payments,
     };
 }
+
 async function lookupAccount(bankCode, accountNumber) {
     try {
         const response = await axios_1.default.get(`${env_1.env.SQUAD_BASE_URL}/payout/account/lookup`, {
@@ -166,6 +168,7 @@ async function lookupAccount(bankCode, accountNumber) {
         throw new Error(`Account lookup failed: ${msg}`);
     }
 }
+
 async function fundTransfer(dto) {
     try {
         const response = await axios_1.default.post(`${env_1.env.SQUAD_BASE_URL}/payout/initiate`, {

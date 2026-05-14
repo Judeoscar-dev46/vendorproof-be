@@ -13,6 +13,7 @@ import { runVendorVerification } from '../../ai/orchestrator';
 import { sendVerificationRequestNotification } from '../../notifications/notificationService';
 import { SupportedMediaType } from '../../ai/documentAnalyser';
 import { encrypt } from '../../utils/crypto';
+import { getWalletByOwner } from '../wallet/wallet.service';
 
 export async function createVerificationRequest(
     institutionId: string,
@@ -29,6 +30,11 @@ export async function createVerificationRequest(
 
     const requestCode = `VP-REQ-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+ 
+    const wallet = await getWalletByOwner(institutionId, 'institution');
+    if (wallet.balance < dto.paymentAmount) {
+        throw new Error(`Insufficient wallet balance. Available: ₦${wallet.balance.toLocaleString()}, Required: ₦${dto.paymentAmount.toLocaleString()}`);
+    }
 
     const request = await VerificationRequest.create({
         requestCode,
@@ -187,7 +193,9 @@ export async function getRequestStatus(requestCode: string, institutionId: strin
 }
 
 export async function getRequestDetails(requestCode: string) {
-    const request = await VerificationRequest.findOne({ requestCode }).populate('institutionId', 'businessName');
+    const request = await VerificationRequest.findOne({ requestCode }).populate('institutionId', 'businessName').populate({
+        path: "verificationId",
+    })
     if (!request) throw new Error('Verification request not found');
 
     const institution = request.institutionId as any;
@@ -199,6 +207,7 @@ export async function getRequestDetails(requestCode: string) {
         institutionName: institution?.businessName ?? 'An institution',
         expiresAt: request.expiresAt,
         status: request.status,
+        verification: request.verificationId,
     };
 }
 
@@ -305,6 +314,10 @@ export async function submitGuestVendorVerification(
         subScores: result.subScores,
         verificationId: result.verificationId,
         guestVerified: true,
+        'guestDetails.bankAccount': guestDetails.bankAccount,
+        'guestDetails.bankCode': guestDetails.bankCode,
+        'guestDetails.companyName': guestDetails.companyName,
+        'guestDetails.rcNumber': guestDetails.rcNumber,
     });
 
     return {
@@ -403,4 +416,201 @@ export async function convertGuestToVendorProfile(
     delete (profileObj as any).passwordHash;
 
     return { vendorProfile: profileObj, token };
+}
+export async function getAllInstitutionRequests(
+    institutionId: string,
+    page = 1,
+    limit = 50,
+    status?: string,
+    search?: string
+) {
+    const skip = (page - 1) * limit;
+    const matchQuery: any = { institutionId: new mongoose.Types.ObjectId(institutionId) };
+
+    if (status && status !== 'all') {
+        matchQuery.status = status;
+    }
+
+    if (search) {
+        matchQuery.$or = [
+            { requestCode: { $regex: search, $options: 'i' } },
+            { vendorEmail: { $regex: search, $options: 'i' } },
+            { 'guestDetails.fullName': { $regex: search, $options: 'i' } },
+        ];
+    }
+
+    // Stats aggregation
+    const statsResult = await VerificationRequest.aggregate([
+        { $match: { institutionId: new mongoose.Types.ObjectId(institutionId) } },
+        {
+            $group: {
+                _id: null,
+                totalVolume: { $sum: 1 },
+                highTrust: { $sum: { $cond: [{ $eq: ['$verdict', 'trusted'] }, 1, 0] } },
+                pendingAI: { $sum: { $cond: [{ $in: ['$status', ['pending_vendor_action', 'in_progress']] }, 1, 0] } },
+                securityBlocks: { $sum: { $cond: [{ $eq: ['$verdict', 'blocked'] }, 1, 0] } },
+            },
+        },
+    ]);
+
+    const stats = statsResult[0] || {
+        totalVolume: 0,
+        highTrust: 0,
+        pendingAI: 0,
+        securityBlocks: 0,
+    };
+    delete (stats as any)._id;
+
+    const [requests, total] = await Promise.all([
+        VerificationRequest.find(matchQuery)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate('vendorProfileId', 'companyName contactEmail'),
+        VerificationRequest.countDocuments(matchQuery),
+    ]);
+
+    return {
+        stats,
+        requests: requests.map(r => ({
+            requestCode: r.requestCode,
+            vendorName: (r.vendorProfileId as any)?.companyName || r.guestDetails?.fullName || 'N/A',
+            vendorEmail: (r.vendorProfileId as any)?.contactEmail || r.vendorEmail || 'N/A',
+            paymentAmount: r.paymentAmount,
+            trustScore: r.trustScore ?? null,
+            status: r.status,
+            verdict: r.verdict ?? null,
+            createdAt: r.createdAt,
+        })),
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        },
+    };
+}
+
+export async function getInstitutionRequestDetails(requestCode: string, institutionId: string) {
+    const request = await VerificationRequest.findOne({
+        requestCode,
+        institutionId,
+    })
+        .populate('vendorProfileId', 'companyName contactEmail phoneNumber verificationStatus trustScore lastVerifiedAt')
+        .populate('verificationId');
+
+    if (!request) throw new Error('Verification request not found');
+
+    const vendor = request.vendorProfileId as any;
+
+    return {
+        requestCode: request.requestCode,
+        status: request.status,
+        paymentAmount: request.paymentAmount,
+        paymentDescription: request.paymentDescription,
+        createdAt: request.createdAt,
+        expiresAt: request.expiresAt,
+        declinedAt: request.declinedAt,
+        declineReason: request.declineReason,
+        vendorName: vendor?.companyName || request.guestDetails?.fullName || 'N/A',
+        vendorEmail: vendor?.contactEmail || request.vendorEmail || 'N/A',
+        vendorPhone: vendor?.phoneNumber || request.vendorPhone || request.guestDetails?.phoneNumber || 'N/A',
+        vendorProfileId: vendor?._id || null,
+        isGuest: !!request.guestToken || !request.vendorProfileId,
+        trustScore: request.trustScore,
+        verdict: request.verdict,
+        subScores: request.subScores,
+        verificationId: request.verificationId?._id || request.verificationId,
+        verification: request.verificationId ? {
+            ...(request.verificationId as any).toObject(),
+            flags: coatFlags((request.verificationId as any).flags),
+            claudeReasoning: sanitizeReasoning((request.verificationId as any).claudeReasoning)
+        } : null,
+        vendorJoinedAt: request.status !== 'pending_vendor_action' ? (request as any).updatedAt : null,
+    };
+}
+
+export async function approveVerificationRequest(requestCode: string, institutionId: string) {
+    const request = await VerificationRequest.findOne({
+        requestCode,
+        institutionId,
+    });
+
+    if (!request) throw new Error('Verification request not found');
+    if (request.status !== 'review') {
+        throw new Error('Only requests in "review" status can be manually approved');
+    }
+
+    request.status = 'trusted';
+    request.verdict = 'trusted';
+    request.trustScore = 100;
+
+    request.subScores = {
+        documentScore: 100,
+        anomalyScore: 100,
+        networkScore: 100
+    };
+
+    await request.save();
+
+    if (request.verificationId) {
+        await Verification.findByIdAndUpdate(request.verificationId, {
+            verdict: 'trusted',
+            trustScore: 100,
+            subScores: {
+                documentScore: 100,
+                anomalyScore: 100,
+                networkScore: 100
+            }
+        });
+    }
+
+    return { message: 'Request manually approved' };
+}
+
+function coatFlags(flags: any[] | undefined): string[] {
+    if (!flags || !Array.isArray(flags) || flags.length === 0) return [];
+
+    const mapping: Record<string, string> = {
+        'BVN name mismatch': 'Identity detail discrepancy',
+        'BVN not found': 'Identity record not found',
+        'BVN date of birth mismatch': 'Identity detail discrepancy',
+        'RC Number mismatch': 'Business registration discrepancy',
+        'RC Number not found': 'Business registration not found',
+        'Document RC mismatch': 'Company name/RC mismatch',
+        'Document name mismatch': 'Identity name mismatch',
+        'Face mismatch': 'Biometric verification failure',
+        'Low trust score': 'General risk flag',
+        'Document tampered': 'Image integrity concern',
+        'Metadata discrepancy': 'Device/Metadata anomaly',
+    };
+
+    return flags.map(f => {
+        const flagStr = String(f);
+
+        if (mapping[flagStr] !== undefined) return mapping[flagStr];
+
+        const lowerF = flagStr.toLowerCase();
+        if (lowerF.includes('bvn')) return 'Identity record anomaly';
+        if (lowerF.includes('rc number') || lowerF.includes('cac')) return 'Business record anomaly';
+        if (lowerF.includes('face') || lowerF.includes('biometric')) return 'Biometric integrity flag';
+        if (lowerF.includes('document') || lowerF.includes('image') || lowerF.includes('tamper')) return 'Document integrity flag';
+        if (lowerF.includes('location') || lowerF.includes('ip') || lowerF.includes('proxy')) return 'Network anomaly detected';
+
+        return 'System security alert';
+    }) as string[];
+}
+
+function sanitizeReasoning(reasoning: string): string {
+    if (!reasoning) return 'No analysis details available.';
+
+    let sanitized = reasoning.replace(/\b\d{11}\b/g, '[REDACTED ID]');
+
+    sanitized = sanitized.replace(/\b(RC|BN|IT|LLP|LP|CAC)\s?\d{5,10}\b/gi, '[REDACTED REG]');
+
+    sanitized = sanitized.replace(/\b(\+?234|0)\d{10}\b/g, '[REDACTED PHONE]');
+
+    sanitized = sanitized.replace(/(mismatch with|instead of|found|extracted)\s+['"][^'"]+['"]/gi, ' [REDACTED VALUE]');
+
+    return sanitized;
 }

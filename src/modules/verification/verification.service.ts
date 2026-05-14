@@ -25,13 +25,13 @@ export async function runVerification(
     ]);
     console.log(docResult, anomalyResult, networkResult, "Results")
 
-    const aggregated = aggregateScores(docResult, anomalyResult, networkResult);
+    const aggregated = aggregateScores(docResult, anomalyResult, networkResult, undefined);
 
     const verification = await Verification.create({
         vendorId: vendor._id,
         trustScore: aggregated.trustScore,
         verdict: aggregated.verdict,
-        subScores: aggregated.subScores,
+        subScores: aggregated.subScores as any,
         flags: aggregated.allFlags,
         claudeReasoning: docResult.reasoning,
         documentMetadata: {

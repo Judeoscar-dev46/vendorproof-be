@@ -2,8 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import * as VRService from './verificationRequest.service';
+import { SupportedMediaType } from '../../ai/documentAnalyser';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+export const uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 }
+]);
 export const uploadDocument = upload.single('document');
 
 const CreateRequestSchema = z.object({
@@ -156,7 +161,7 @@ export async function submitVerification(req: Request, res: Response, next: Next
         }
 
         const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'application/pdf';
+        const mediaType = req.file.mimetype as SupportedMediaType;
 
         const result = await VRService.submitVendorVerification(
             req.params.requestCode as string,
@@ -248,8 +253,8 @@ export async function submitVerificationGuest(req: Request, res: Response, next:
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
 
-        const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'application/pdf';
+        const docBase64 = req.file.buffer.toString('base64');
+        const docMediaType = req.file.mimetype as SupportedMediaType;
 
         const { guestToken, invoiceAmount, ...guestDetails } = parsed.data;
 
@@ -257,8 +262,8 @@ export async function submitVerificationGuest(req: Request, res: Response, next:
             req.params.requestCode as string,
             guestToken,
             guestDetails,
-            base64,
-            mediaType,
+            docBase64,
+            docMediaType,
             invoiceAmount
         );
 
@@ -293,6 +298,72 @@ export async function convertGuestAccount(req: Request, res: Response, next: Nex
         if (err instanceof Error) {
             if (err.message.includes('No completed guest verification')) return fail(res, err.message, 404);
             if (err.message.includes('already exists')) return fail(res, err.message, 409);
+        }
+        next(err);
+    }
+}
+
+export async function getAllRequests(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const status = req.query.status as string;
+        const search = req.query.search as string;
+
+        const result = await VRService.getAllInstitutionRequests(
+            req.user.userId,
+            page,
+            limit,
+            status,
+            search
+        );
+
+        return ok(res, result);
+    } catch (err: unknown) {
+        next(err);
+    }
+}
+
+export async function getRequestDetailsForInstitution(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+
+        const result = await VRService.getInstitutionRequestDetails(
+            req.params.requestCode as string,
+            req.user.userId
+        );
+
+        return ok(res, result);
+    } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('not found')) {
+            return fail(res, err.message, 404);
+        }
+        next(err);
+    }
+}
+
+export async function approveRequest(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+
+        const result = await VRService.approveVerificationRequest(
+            req.params.requestCode as string,
+            req.user.userId
+        );
+
+        return ok(res, result);
+    } catch (err: unknown) {
+        if (err instanceof Error) {
+            if (err.message.includes('not found')) return fail(res, err.message, 404);
+            if (err.message.includes('Only requests in "review"')) return fail(res, err.message, 400);
         }
         next(err);
     }

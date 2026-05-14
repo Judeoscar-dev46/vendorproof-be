@@ -2,9 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import * as IndividualService from './individual.service';
+import { SupportedMediaType } from '../../ai/documentAnalyser';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
-export const uploadDocument = upload.single('document');
+export const uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 }
+]);
 
 const CreateProfileSchema = z.object({
     fullName: z.string().min(2, 'Full name is required'),
@@ -109,21 +113,44 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
 
 export async function verifyProfile(req: Request, res: Response, next: NextFunction) {
     try {
-        if (!req.file) {
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+        if (!files?.document?.[0]) {
             return fail(res, 'Identity document file is required');
         }
+        if (!files?.selfie?.[0]) {
+            return fail(res, 'Selfie image is required for face recognition');
+        }
 
-        const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'application/pdf';
+        const docBase64 = files.document[0].buffer.toString('base64');
+        const docMediaType = files.document[0].mimetype as any;
+
+        const selfieBase64 = files.selfie[0].buffer.toString('base64');
 
         const result = await IndividualService.verifyIndividualProfileStandAlone(
             req.params.id as string,
-            base64,
-            mediaType
+            docBase64,
+            selfieBase64,
+            docMediaType as SupportedMediaType
         );
 
         return ok(res, result);
     } catch (err) {
+        next(err);
+    }
+}
+
+export async function getDashboard(req: Request, res: Response, next: NextFunction) {
+    try {
+        const id = req.params.id || (req.user as any)?.userId;
+        if (!id) return fail(res, 'Profile ID is required', 400);
+
+        const data = await IndividualService.getIndividualDashboard(id);
+        return ok(res, data);
+    } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('not found')) {
+            return fail(res, err.message, 404);
+        }
         next(err);
     }
 }

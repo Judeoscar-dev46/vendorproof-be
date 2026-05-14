@@ -11,12 +11,19 @@ import {
     joinRequestGuest,
     submitVerificationGuest,
     convertGuestAccount,
+    getAllRequests,
+    getRequestDetailsForInstitution,
+    approveRequest,
+    uploadVerificationFiles
 } from './verificationRequest.controller';
 
 const router = Router();
 
-// Institution: create a verification request for a vendor
+// Institution: create, list or approve verification requests
 router.post('/', authenticate, createRequest);
+router.get('/', authenticate, getAllRequests);
+router.get('/:requestCode', authenticate, getRequestDetailsForInstitution);
+router.patch('/:requestCode/approve', authenticate, approveRequest);
 
 // Institution: poll request status
 router.get('/:requestCode/status', authenticate, getRequestStatus);
