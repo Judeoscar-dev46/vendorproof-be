@@ -10,6 +10,7 @@ export interface IVerification extends Document {
         documentScore: number;
         anomalyScore: number;
         networkScore: number;
+        faceScore?: number;
     };
     flags: string[];
     claudeReasoning: string;
@@ -35,6 +36,7 @@ const VerificationSchema = new Schema<IVerification>({
         documentScore: Number,
         anomalyScore: Number,
         networkScore: Number,
+        faceScore: Number,
     },
     flags: [String],
     claudeReasoning: String,

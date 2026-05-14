@@ -1,4 +1,5 @@
 import { sendEmail } from './emailService';
+import { sendSms } from './termiiService';
 import { env } from '../config/env';
 
 export async function sendVerificationRequestNotification(payload: {
@@ -13,8 +14,7 @@ export async function sendVerificationRequestNotification(payload: {
     const message = `${payload.institutionName} wants to pay you ₦${payload.paymentAmount.toLocaleString()}. Verify your business securely at VendorProof to receive payment. Link: ${link} (expires ${payload.expiresAt.toLocaleString()})`;
 
     if (payload.recipientPhone) {
-        // await termii.sendSms(payload.recipientPhone, message);
-        console.log(`[SMS] → ${payload.recipientPhone}: ${message}`);
+        await sendSms(payload.recipientPhone, message);
     }
 
     if (payload.recipientEmail) {
@@ -51,7 +51,7 @@ export async function sendSessionInviteNotification(payload: {
     const message = `${payload.initiatorName} wants to send you ₦${payload.amount.toLocaleString()} for "${payload.description}". Both parties verify identity first. Join here: ${link} (expires in 2 hours)`;
 
     if (payload.recipientPhone) {
-        console.log(`[SMS] → ${payload.recipientPhone}: ${message}`);
+        await sendSms(payload.recipientPhone, message);
     }
 
     if (payload.recipientEmail) {

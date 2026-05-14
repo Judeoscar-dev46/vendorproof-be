@@ -14,6 +14,7 @@ import {
     getAllRequests,
     getRequestDetailsForInstitution,
     approveRequest,
+    uploadVerificationFiles
 } from './verificationRequest.controller';
 
 const router = Router();

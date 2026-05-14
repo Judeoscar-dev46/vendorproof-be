@@ -4,6 +4,8 @@ import { IndividualProfile, IIndividualProfile } from '../../models/individualPr
 import { Verification } from '../../models/verification.model';
 import { runIndividualVerification } from '../../ai/orchestrator';
 import { SupportedMediaType } from '../../ai/documentAnalyser';
+import { Wallet } from '../../models/wallet.model';
+import { TransactionSession } from '../../models/transactionSession.model';
 
 export interface CreateIndividualProfileDTO {
     fullName: string;
@@ -73,6 +75,7 @@ export async function updateIndividualProfile(
 export async function verifyIndividualProfileStandAlone(
     id: string,
     documentBase64: string,
+    selfieBase64: string,
     mediaType: SupportedMediaType
 ) {
     const profile = await IndividualProfile.findById(id).select('+bvn +ninNumber +bankAccount');
@@ -85,7 +88,7 @@ export async function verifyIndividualProfileStandAlone(
         }
     }
 
-    const result = await runIndividualVerification(profile, documentBase64, mediaType);
+    const result = await runIndividualVerification(profile, documentBase64, selfieBase64, mediaType);
 
     await IndividualProfile.findByIdAndUpdate(id, {
         trustScore: result.trustScore,
@@ -135,4 +138,59 @@ export async function getIndividualVerificationHistory(id: string) {
         .select('trustScore verdict flags subScores createdAt');
 
     return { profile, verifications };
+}
+
+export async function getIndividualDashboard(id: string) {
+    const profile = await IndividualProfile.findById(id);
+    if (!profile) throw new Error('Individual profile not found');
+
+    const [wallet, verificationsCount, recentVerifications, recentSessions] = await Promise.all([
+        Wallet.findOne({ ownerId: id, ownerType: 'individual' }),
+        Verification.countDocuments({ subjectId: id, subjectType: 'individual' }),
+        Verification.find({ subjectId: id, subjectType: 'individual' })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .select('trustScore verdict createdAt'),
+        TransactionSession.find({
+            $or: [
+                { initiatorProfileId: id },
+                { recipientProfileId: id }
+            ]
+        })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .populate('initiatorProfileId', 'fullName')
+            .populate('recipientProfileId', 'fullName')
+    ]);
+
+    return {
+        profile: {
+            fullName: profile.fullName,
+            verificationStatus: profile.verificationStatus,
+            trustScore: profile.trustScore,
+            lastVerifiedAt: profile.lastVerifiedAt,
+        },
+        stats: {
+            walletBalance: wallet?.balance || 0,
+            verificationsCount,
+            totalP2PVolume: recentSessions.reduce((acc, s) => acc + (s.status === 'payment_released' ? s.amount : 0), 0),
+        },
+        wallet: wallet ? {
+            accountNumber: wallet.accountNumber,
+            bankCode: wallet.bankCode,
+            status: wallet.status,
+        } : null,
+        recentVerifications,
+        recentSessions: recentSessions.map(s => ({
+            sessionCode: s.sessionCode,
+            amount: s.amount,
+            description: s.description,
+            status: s.status,
+            role: String(s.initiatorProfileId?._id) === id ? 'initiator' : 'recipient',
+            otherParty: String(s.initiatorProfileId?._id) === id 
+                ? (s.recipientProfileId as any)?.fullName || s.guestDetails?.fullName || 'Guest'
+                : (s.initiatorProfileId as any)?.fullName,
+            createdAt: s.createdAt,
+        })),
+    };
 }

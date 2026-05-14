@@ -5,6 +5,7 @@ import { scoreAnomaly } from './anomalyScorer';
 import { scoreIndividualAnomaly } from './individualAnomalyScorer';
 import { analyseNetwork } from './networkAnalyser';
 import { aggregateScores, aggregateIndividualScores } from './scoreAggregator';
+import { matchFace } from './faceAnalyser';
 import { IVendorProfile } from '../models/vendorProfile.model';
 import { IIndividualProfile } from '../models/individualProfile.model';
 import { Verification } from '../models/verification.model';
@@ -34,7 +35,7 @@ export async function runVendorVerification(
         subjectType: 'vendor',
         trustScore: aggregated.trustScore,
         verdict: aggregated.verdict,
-        subScores: aggregated.subScores,
+        subScores: aggregated.subScores as any,
         flags: aggregated.allFlags,
         claudeReasoning: docResult.reasoning,
         documentMetadata: {
@@ -53,12 +54,13 @@ export async function runVendorVerification(
 export async function runIndividualVerification(
     profile: IIndividualProfile,
     documentBase64: string,
+    selfieBase64: string,
     mediaType: SupportedMediaType,
     transactionAmount?: number
 ) {
     const plainBvn = decrypt(profile.bvn);
 
-    const [identityResult, anomalyResult, networkResult] = await Promise.all([
+    const [identityResult, anomalyResult, networkResult, faceResult] = await Promise.all([
         analyseIdentityDocument(documentBase64, mediaType, {
             fullName: profile.fullName,
             dateOfBirth: profile.dateOfBirth.toISOString(),
@@ -67,16 +69,17 @@ export async function runIndividualVerification(
         }),
         Promise.resolve(scoreIndividualAnomaly(profile, transactionAmount)),
         analyseNetwork(String(profile._id), profile.bankAccount, plainBvn, '', 'individual'),
+        matchFace(documentBase64, selfieBase64),
     ]);
 
-    const aggregated = aggregateIndividualScores(identityResult, anomalyResult, networkResult);
+    const aggregated = aggregateIndividualScores(identityResult, anomalyResult, networkResult, faceResult);
 
     const verification = await Verification.create({
         subjectId: profile._id,
         subjectType: 'individual',
         trustScore: aggregated.trustScore,
         verdict: aggregated.verdict,
-        subScores: aggregated.subScores,
+        subScores: aggregated.subScores as any,
         flags: aggregated.allFlags,
         claudeReasoning: identityResult.reasoning,
         paymentReleased: false,
@@ -96,6 +99,7 @@ export async function runGuestIndividualVerification(
         ninNumber?: string;
     },
     documentBase64: string,
+    selfieBase64: string,
     mediaType: SupportedMediaType,
     transactionAmount?: number
 ) {
@@ -106,7 +110,7 @@ export async function runGuestIndividualVerification(
         ...guestData,
     } as any;
 
-    const [identityResult, anomalyResult, networkResult] = await Promise.all([
+    const [identityResult, anomalyResult, networkResult, faceResult] = await Promise.all([
         analyseIdentityDocument(documentBase64, mediaType, {
             fullName: guestData.fullName,
             dateOfBirth: guestData.dateOfBirth.toISOString(),
@@ -115,16 +119,17 @@ export async function runGuestIndividualVerification(
         }),
         Promise.resolve(scoreIndividualAnomaly(mockProfile, transactionAmount)),
         analyseNetwork(tempId.toString(), guestData.bankAccount, guestData.bvn, '', 'individual'),
+        matchFace(documentBase64, selfieBase64),
     ]);
 
-    const aggregated = aggregateIndividualScores(identityResult, anomalyResult, networkResult);
+    const aggregated = aggregateIndividualScores(identityResult, anomalyResult, networkResult, faceResult);
 
     const verification = await Verification.create({
         subjectId: undefined as any, // guest doesn't have a profile yet
         subjectType: 'individual',
         trustScore: aggregated.trustScore,
         verdict: aggregated.verdict,
-        subScores: aggregated.subScores,
+        subScores: aggregated.subScores as any,
         flags: aggregated.allFlags,
         claudeReasoning: identityResult.reasoning,
         paymentReleased: false,

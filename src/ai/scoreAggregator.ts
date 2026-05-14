@@ -13,6 +13,7 @@ export interface AggregatedScore {
         documentScore: number;
         anomalyScore: number;
         networkScore: number;
+        faceScore?: number | undefined;
     };
     allFlags: string[];
     verdictSummary: string;
@@ -28,7 +29,7 @@ function buildVerdictSummary(
     score: number,
     verdict: Verdict,
     flags: string[],
-    subScores: { documentScore: number; anomalyScore: number; networkScore: number },
+    subScores: { documentScore: number; anomalyScore: number; networkScore: number; faceScore?: number | undefined },
     mode: 'vendor' | 'individual'
 ): string {
     if (verdict === 'trusted') {
@@ -39,12 +40,15 @@ function buildVerdictSummary(
         ? ` Key concerns: ${flags.slice(0, 3).join('; ')}${flags.length > 3 ? ` and ${flags.length - 3} more` : ''}.`
         : '';
 
-    const sortedEntries = Object.entries(subScores).sort(([, a], [, b]) => a - b);
+    const sortedEntries = Object.entries(subScores)
+        .filter(([, val]) => val !== undefined)
+        .sort(([, a], [, b]) => (a as number) - (b as number));
     const weakestArea = (sortedEntries[0]?.[0] ?? 'analysis')
         .replace('Score', '')
         .replace('document', 'document analysis')
         .replace('anomaly', 'anomaly detection')
-        .replace('network', 'network analysis');
+        .replace('network', 'network analysis')
+        .replace('face', 'facial recognition');
 
     if (verdict === 'review') {
         return `This ${mode === 'vendor' ? 'vendor' : 'individual'} requires manual review (score: ${score}/100). The weakest signal came from ${weakestArea}.${flagSummary} A compliance officer should review before approving payment.`;
@@ -90,19 +94,24 @@ export function aggregateScores(
 }
 
 const INDIVIDUAL_WEIGHTS = {
-    identity: 0.50,
-    anomaly: 0.30,
-    network: 0.20,
+    identity: 0.40,
+    face: 0.25,
+    anomaly: 0.20,
+    network: 0.15,
 };
 
 export function aggregateIndividualScores(
     identity: IdentityAnalysisResult,
     anomaly: IndividualAnomalyResult,
-    network: NetworkResult
+    network: NetworkResult,
+    face?: { score: number; match: boolean; verdict: string; detail: string }
 ): AggregatedScore {
+
+    const faceScore = face?.score ?? 100; // default to 100 if no face data provided (fallback)
 
     const rawScore = Math.round(
         identity.score * INDIVIDUAL_WEIGHTS.identity +
+        faceScore * INDIVIDUAL_WEIGHTS.face +
         anomaly.score * INDIVIDUAL_WEIGHTS.anomaly +
         network.score * INDIVIDUAL_WEIGHTS.network
     );
@@ -121,6 +130,11 @@ export function aggregateIndividualScores(
         trustScore = Math.min(trustScore, 25);
     }
 
+    if (face && !face.match) {
+        // If face match fails significantly, cap the trust score
+        trustScore = Math.min(trustScore, face.verdict === 'mismatch' ? 20 : 45);
+    }
+
     const verdict = deriveVerdict(trustScore);
     const allFlags = [...identity.flags, ...anomaly.flags, ...network.flags];
 
@@ -128,6 +142,7 @@ export function aggregateIndividualScores(
         documentScore: identity.score,
         anomalyScore: anomaly.score,
         networkScore: network.score,
+        faceScore: face?.score,
     };
 
     if (trustScore < rawScore) {

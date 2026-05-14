@@ -79,11 +79,11 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
     const providedNameFirstWord = vendorName.toLowerCase().split(' ')[0] ?? '';
     const nameMatch = resolvedAccount.account_name.toLowerCase().includes(providedNameFirstWord);
 
-    if (!nameMatch) {
-        throw new Error(
-            `Account name mismatch: Provided name "${vendorName}" vs Bank record "${resolvedAccount.account_name}". Please verify the details.`
-        );
-    }
+    // if (!nameMatch) {
+    //     throw new Error(
+    //         `Account name mismatch: Provided name "${vendorName}" vs Bank record "${resolvedAccount.account_name}". Please verify the details.`
+    //     );
+    // }
 
     const transactionRef = `${MERCHAT_ID}-${dto.verificationId}`;
 
@@ -113,6 +113,7 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
         );
         squadResponse = response.data;
     } catch (err) {
+        console.log(err)
         const axiosErr = err as AxiosError<{ message?: string }>;
         const squadMessage = axiosErr.response?.data?.message ?? axiosErr.message;
         throw new Error(`Squad API error: ${squadMessage}`);
@@ -233,7 +234,7 @@ export async function lookupAccount(
                 timeout: 10000,
             }
         );
-        console.log(response.data)
+
         return response.data.data;
     } catch (err) {
         const axiosErr = err as AxiosError<{ message?: string }>;

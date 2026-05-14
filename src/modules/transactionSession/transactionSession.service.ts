@@ -10,6 +10,7 @@ import { getWalletByOwner, debitWallet } from '../wallet/wallet.service';
 import { AuditLog } from '../../models/auditLog.model';
 import { SupportedMediaType } from '../../ai/documentAnalyser';
 import { env } from '../../config/env';
+import { encrypt } from '../../utils/crypto';
 
 export async function createTransactionSession(
     initiatorProfileId: string,
@@ -27,7 +28,11 @@ export async function createTransactionSession(
     const sessionCode = `VP-${crypto.randomBytes(2).toString('hex').toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
 
-    // Check if initiator is already verified
+    const wallet = await getWalletByOwner(initiatorProfileId, 'individual');
+    if (wallet.balance < dto.amount) {
+        throw new Error(`Insufficient wallet balance. Available: ₦${wallet.balance.toLocaleString()}, Required: ₦${dto.amount.toLocaleString()}`);
+    }
+
     const vCheck = await hasValidVerification(initiatorProfileId);
 
     const session = await TransactionSession.create({
@@ -102,18 +107,24 @@ export async function joinTransactionSession(
     return updatedSession;
 }
 export async function getSessionDetails(sessionCode: string) {
-    const session = await TransactionSession.findOne({ sessionCode }).populate('initiatorProfileId', 'fullName');
+    const session = await TransactionSession.findOne({ sessionCode }).populate('initiatorProfileId', 'fullName').populate("recipientVerificationId");
     if (!session) throw new Error('Session not found');
-
     const initiator = session.initiatorProfileId as any;
+    const recipient = session.recipientProfileId as any;
 
     return {
         sessionCode: session.sessionCode,
         amount: session.amount,
         description: session.description,
         initiatorName: initiator?.fullName ?? 'Someone',
+        initiatorProfileId: session.initiatorProfileId,
+        recipientProfileId: session.recipientProfileId,
         expiresAt: session.expiresAt,
         status: session.status,
+        recipientVerificationId: session.recipientVerificationId,
+        recipientTrustScore: session.recipientTrustScore,
+        recipientVerdict: session.recipientVerdict,
+        createdAt: session.createdAt,
     };
 }
 
@@ -157,6 +168,7 @@ export async function submitSessionVerification(
     sessionCode: string,
     profileId: string,
     documentBase64: string,
+    selfieBase64: string,
     mediaType: SupportedMediaType
 ) {
     const session = await TransactionSession.findOne({ sessionCode });
@@ -190,6 +202,7 @@ export async function submitSessionVerification(
     const result = await runIndividualVerification(
         profile,
         documentBase64,
+        selfieBase64,
         mediaType,
         session.amount
     );
@@ -469,15 +482,14 @@ export async function submitSessionVerificationAsGuest(
     sessionCode: string,
     guestToken: string,
     guestData: {
-        fullName: string;
         dateOfBirth: string;
         bvn: string;
         bankAccount: string;
         bankCode: string;
-        phoneNumber: string;
         ninNumber?: string;
     },
     documentBase64: string,
+    selfieBase64: string,
     mediaType: SupportedMediaType
 ) {
     const session = await TransactionSession.findOne({ sessionCode, guestToken });
@@ -495,9 +507,12 @@ export async function submitSessionVerificationAsGuest(
     const result = await runGuestIndividualVerification(
         {
             ...guestData,
+            fullName: session.guestDetails?.fullName || 'Guest',
+            phoneNumber: session.guestDetails?.phoneNumber || '',
             dateOfBirth: new Date(guestData.dateOfBirth),
         },
         documentBase64,
+        selfieBase64,
         mediaType,
         session.amount
     );
@@ -508,9 +523,7 @@ export async function submitSessionVerificationAsGuest(
         recipientTrustScore: result.trustScore,
         recipientVerdict: result.verdict,
         status: session.initiatorVerificationId ? 'both_verified' : 'recipient_verified',
-        'guestDetails.fullName': guestData.fullName,
-        'guestDetails.phoneNumber': guestData.phoneNumber,
-        'guestDetails.bvn': guestData.bvn,
+        'guestDetails.bvn': encrypt(guestData.bvn),
         'guestDetails.bankAccount': guestData.bankAccount,
         'guestDetails.bankCode': guestData.bankCode,
         'guestDetails.dateOfBirth': new Date(guestData.dateOfBirth),

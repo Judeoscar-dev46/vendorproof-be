@@ -13,6 +13,7 @@ import { runVendorVerification } from '../../ai/orchestrator';
 import { sendVerificationRequestNotification } from '../../notifications/notificationService';
 import { SupportedMediaType } from '../../ai/documentAnalyser';
 import { encrypt } from '../../utils/crypto';
+import { getWalletByOwner } from '../wallet/wallet.service';
 
 export async function createVerificationRequest(
     institutionId: string,
@@ -29,6 +30,11 @@ export async function createVerificationRequest(
 
     const requestCode = `VP-REQ-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+ 
+    const wallet = await getWalletByOwner(institutionId, 'institution');
+    if (wallet.balance < dto.paymentAmount) {
+        throw new Error(`Insufficient wallet balance. Available: ₦${wallet.balance.toLocaleString()}, Required: ₦${dto.paymentAmount.toLocaleString()}`);
+    }
 
     const request = await VerificationRequest.create({
         requestCode,

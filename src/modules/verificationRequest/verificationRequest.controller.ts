@@ -2,8 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import * as VRService from './verificationRequest.service';
+import { SupportedMediaType } from '../../ai/documentAnalyser';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+export const uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 }
+]);
 export const uploadDocument = upload.single('document');
 
 const CreateRequestSchema = z.object({
@@ -156,7 +161,7 @@ export async function submitVerification(req: Request, res: Response, next: Next
         }
 
         const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'application/pdf';
+        const mediaType = req.file.mimetype as SupportedMediaType;
 
         const result = await VRService.submitVendorVerification(
             req.params.requestCode as string,
@@ -248,8 +253,8 @@ export async function submitVerificationGuest(req: Request, res: Response, next:
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
 
-        const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'application/pdf';
+        const docBase64 = req.file.buffer.toString('base64');
+        const docMediaType = req.file.mimetype as SupportedMediaType;
 
         const { guestToken, invoiceAmount, ...guestDetails } = parsed.data;
 
@@ -257,8 +262,8 @@ export async function submitVerificationGuest(req: Request, res: Response, next:
             req.params.requestCode as string,
             guestToken,
             guestDetails,
-            base64,
-            mediaType,
+            docBase64,
+            docMediaType,
             invoiceAmount
         );
 
