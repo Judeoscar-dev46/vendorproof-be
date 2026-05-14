@@ -23,6 +23,7 @@ const envSchema = zod_1.z.object({
     TERMII_API_KEY: zod_1.z.string(),
     TERMII_SECRET_KEY: zod_1.z.string(),
     RESEND_API_KEY: zod_1.z.string(),
+    FACE_AI_SIDECAR_URL: zod_1.z.string().default('http://localhost:8000'),
 });
 exports.env = envSchema.parse(process.env);
 //# sourceMappingURL=env.js.map

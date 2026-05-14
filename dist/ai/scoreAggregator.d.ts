@@ -11,10 +11,16 @@ export interface AggregatedScore {
         documentScore: number;
         anomalyScore: number;
         networkScore: number;
+        faceScore?: number | undefined;
     };
     allFlags: string[];
     verdictSummary: string;
 }
 export declare function aggregateScores(doc: DocumentAnalysisResult, anomaly: AnomalyResult, network: NetworkResult): AggregatedScore;
-export declare function aggregateIndividualScores(identity: IdentityAnalysisResult, anomaly: IndividualAnomalyResult, network: NetworkResult): AggregatedScore;
+export declare function aggregateIndividualScores(identity: IdentityAnalysisResult, anomaly: IndividualAnomalyResult, network: NetworkResult, face?: {
+    score: number;
+    match: boolean;
+    verdict: string;
+    detail: string;
+}): AggregatedScore;
 //# sourceMappingURL=scoreAggregator.d.ts.map

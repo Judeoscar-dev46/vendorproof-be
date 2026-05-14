@@ -1,4 +1,4 @@
-import { IVendor } from '../../models/vendor.model';
+import { IVendorProfile } from '../../models/vendorProfile.model';
 export interface CreateVendorDTO {
     companyName: string;
     rcNumber: string;
@@ -8,25 +8,26 @@ export interface CreateVendorDTO {
     address: string;
     registrationDate: Date;
     contactEmail: string;
+    phoneNumber: string;
 }
 export interface VendorFilters {
-    status?: 'pending' | 'trusted' | 'review' | 'blocked' | undefined;
+    status?: IVendorProfile['verificationStatus'] | undefined;
     search?: string | undefined;
     page?: number | undefined;
     limit?: number | undefined;
 }
-export declare function createVendor(dto: CreateVendorDTO): Promise<IVendor>;
-export declare function getVendorById(id: string): Promise<IVendor>;
+export declare function createVendor(dto: CreateVendorDTO): Promise<IVendorProfile>;
+export declare function getVendorById(id: string): Promise<IVendorProfile>;
 export declare function getAllVendors(filters: VendorFilters): Promise<{
-    vendors: IVendor[];
+    vendors: IVendorProfile[];
     total: number;
     page: number;
     totalPages: number;
 }>;
-export declare function updateVendorStatus(id: string, status: IVendor['status'], reason?: string): Promise<IVendor>;
+export declare function updateVendorStatus(id: string, status: IVendorProfile['verificationStatus'], reason?: string): Promise<IVendorProfile>;
 export declare function deleteVendor(id: string): Promise<void>;
 export declare function getVendorWithVerifications(id: string): Promise<{
-    vendor: import("mongoose").Document<unknown, {}, IVendor, {}, import("mongoose").DefaultSchemaOptions> & IVendor & Required<{
+    vendor: import("mongoose").Document<unknown, {}, IVendorProfile, {}, import("mongoose").DefaultSchemaOptions> & IVendorProfile & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {
         __v: number;

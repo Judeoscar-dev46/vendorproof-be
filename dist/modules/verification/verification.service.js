@@ -5,10 +5,10 @@ const documentAnalyser_1 = require("../../ai/documentAnalyser");
 const anomalyScorer_1 = require("../../ai/anomalyScorer");
 const networkAnalyser_1 = require("../../ai/networkAnalyser");
 const scoreAggregator_1 = require("../../ai/scoreAggregator");
-const vendor_model_1 = require("../../models/vendor.model");
+const vendorProfile_model_1 = require("../../models/vendorProfile.model");
 const verification_model_1 = require("../../models/verification.model");
 async function runVerification(vendorId, documentBase64, mediaType, invoiceAmount) {
-    const vendor = await vendor_model_1.Vendor.findById(vendorId);
+    const vendor = await vendorProfile_model_1.VendorProfile.findById(vendorId);
     if (!vendor)
         throw new Error('Vendor not found');
     const [docResult, anomalyResult, networkResult] = await Promise.all([
@@ -38,9 +38,9 @@ async function runVerification(vendorId, documentBase64, mediaType, invoiceAmoun
         },
         paymentReleased: false,
     });
-    await vendor_model_1.Vendor.findByIdAndUpdate(vendorId, {
-        status: aggregated.verdict,
-        latestTrustScore: aggregated.trustScore,
+    await vendorProfile_model_1.VendorProfile.findByIdAndUpdate(vendorId, {
+        verificationStatus: aggregated.verdict,
+        trustScore: aggregated.trustScore,
     });
     return verification;
 }

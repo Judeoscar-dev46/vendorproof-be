@@ -65,13 +65,14 @@ const CreateVendorSchema = zod_1.z.object({
         return zod_1.z.NEVER;
     }),
     contactEmail: zod_1.z.string().email('Invalid email address'),
+    phoneNumber: zod_1.z.string().min(10, 'Phone number is required'),
 });
 const UpdateStatusSchema = zod_1.z.object({
-    status: zod_1.z.enum(['pending', 'trusted', 'review', 'blocked']),
+    status: zod_1.z.enum(['unverified', 'pending', 'trusted', 'review', 'blocked']),
     reason: zod_1.z.string().optional(),
 });
 const VendorFiltersSchema = zod_1.z.object({
-    status: zod_1.z.enum(['pending', 'trusted', 'review', 'blocked']).optional(),
+    status: zod_1.z.enum(['unverified', 'pending', 'trusted', 'review', 'blocked']).optional(),
     search: zod_1.z.string().optional(),
     page: zod_1.z.coerce.number().min(1).default(1),
     limit: zod_1.z.coerce.number().min(1).max(100).default(20),

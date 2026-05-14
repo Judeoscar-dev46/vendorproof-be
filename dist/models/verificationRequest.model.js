@@ -61,6 +61,10 @@ const VerificationRequestSchema = new mongoose_1.Schema({
     guestDetails: {
         fullName: String,
         phoneNumber: String,
+        bankAccount: String,
+        bankCode: String,
+        companyName: String,
+        rcNumber: String,
     },
     expiresAt: { type: Date, required: true },
     declinedAt: Date,

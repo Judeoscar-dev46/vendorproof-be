@@ -80,7 +80,7 @@ Return ONLY a valid JSON object with no additional text, preamble, or markdown f
   "flags": [
     "<each flag is a specific, plain-language observation, e.g. 'Font inconsistency detected on date of birth field'>"
   ],
-  "reasoning": "<2-3 sentences summarising your confidence in this document and the key reasons for the score>"
+  "reasoning": "<2-3 sentences summarising your confidence. IMPORTANT: To protect privacy, do not include specific PII such as full BVNs, ID numbers, or direct name/date values. Use generic descriptions like 'discrepancy in identity details' or 'identification record mismatch' so this summary is safe for institutional review.>"
 }`;
     const content = buildContentBlock(base64Document, mediaType, prompt);
     const response = await client.messages.create({

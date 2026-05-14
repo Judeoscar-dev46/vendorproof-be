@@ -22,6 +22,10 @@ export interface IVerificationRequest extends Document {
     guestDetails?: {
         fullName?: string;
         phoneNumber?: string;
+        bankAccount?: string;
+        bankCode?: string;
+        companyName?: string;
+        rcNumber?: string;
     };
     expiresAt: Date;
     declinedAt?: Date;

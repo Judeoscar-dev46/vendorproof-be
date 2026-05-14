@@ -12,6 +12,9 @@ exports.getRequestDetails = getRequestDetails;
 exports.joinVerificationRequestAsGuest = joinVerificationRequestAsGuest;
 exports.submitGuestVendorVerification = submitGuestVendorVerification;
 exports.convertGuestToVendorProfile = convertGuestToVendorProfile;
+exports.getAllInstitutionRequests = getAllInstitutionRequests;
+exports.getInstitutionRequestDetails = getInstitutionRequestDetails;
+exports.approveVerificationRequest = approveVerificationRequest;
 const crypto_1 = __importDefault(require("crypto"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
@@ -26,12 +29,17 @@ const verification_model_1 = require("../../models/verification.model");
 const orchestrator_1 = require("../../ai/orchestrator");
 const notificationService_1 = require("../../notifications/notificationService");
 const crypto_2 = require("../../utils/crypto");
+const wallet_service_1 = require("../wallet/wallet.service");
 async function createVerificationRequest(institutionId, dto) {
     if (!dto.vendorEmail && !dto.vendorPhone) {
         throw new Error('At least one of vendorEmail or vendorPhone is required');
     }
     const requestCode = `VP-REQ-${crypto_1.default.randomBytes(4).toString('hex').toUpperCase()}`;
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+    const wallet = await (0, wallet_service_1.getWalletByOwner)(institutionId, 'institution');
+    if (wallet.balance < dto.paymentAmount) {
+        throw new Error(`Insufficient wallet balance. Available: ₦${wallet.balance.toLocaleString()}, Required: ₦${dto.paymentAmount.toLocaleString()}`);
+    }
     const request = await verificationRequest_model_1.VerificationRequest.create({
         requestCode,
         institutionId,
@@ -157,7 +165,9 @@ async function getRequestStatus(requestCode, institutionId) {
     };
 }
 async function getRequestDetails(requestCode) {
-    const request = await verificationRequest_model_1.VerificationRequest.findOne({ requestCode }).populate('institutionId', 'businessName');
+    const request = await verificationRequest_model_1.VerificationRequest.findOne({ requestCode }).populate('institutionId', 'businessName').populate({
+        path: "verificationId",
+    });
     if (!request)
         throw new Error('Verification request not found');
     const institution = request.institutionId;
@@ -168,6 +178,7 @@ async function getRequestDetails(requestCode) {
         institutionName: institution?.businessName ?? 'An institution',
         expiresAt: request.expiresAt,
         status: request.status,
+        verification: request.verificationId,
     };
 }
 async function joinVerificationRequestAsGuest(requestCode, guestDetails) {
@@ -238,6 +249,10 @@ async function submitGuestVendorVerification(requestCode, guestToken, guestDetai
         subScores: result.subScores,
         verificationId: result.verificationId,
         guestVerified: true,
+        'guestDetails.bankAccount': guestDetails.bankAccount,
+        'guestDetails.bankCode': guestDetails.bankCode,
+        'guestDetails.companyName': guestDetails.companyName,
+        'guestDetails.rcNumber': guestDetails.rcNumber,
     });
     return {
         trustScore: result.trustScore,
@@ -309,5 +324,177 @@ async function convertGuestToVendorProfile(requestCode, guestToken, accountDetai
     const profileObj = vendorProfile.toObject();
     delete profileObj.passwordHash;
     return { vendorProfile: profileObj, token };
+}
+async function getAllInstitutionRequests(institutionId, page = 1, limit = 50, status, search) {
+    const skip = (page - 1) * limit;
+    const matchQuery = { institutionId: new mongoose_1.default.Types.ObjectId(institutionId) };
+    if (status && status !== 'all') {
+        matchQuery.status = status;
+    }
+    if (search) {
+        matchQuery.$or = [
+            { requestCode: { $regex: search, $options: 'i' } },
+            { vendorEmail: { $regex: search, $options: 'i' } },
+            { 'guestDetails.fullName': { $regex: search, $options: 'i' } },
+        ];
+    }
+    // Stats aggregation
+    const statsResult = await verificationRequest_model_1.VerificationRequest.aggregate([
+        { $match: { institutionId: new mongoose_1.default.Types.ObjectId(institutionId) } },
+        {
+            $group: {
+                _id: null,
+                totalVolume: { $sum: 1 },
+                highTrust: { $sum: { $cond: [{ $eq: ['$verdict', 'trusted'] }, 1, 0] } },
+                pendingAI: { $sum: { $cond: [{ $in: ['$status', ['pending_vendor_action', 'in_progress']] }, 1, 0] } },
+                securityBlocks: { $sum: { $cond: [{ $eq: ['$verdict', 'blocked'] }, 1, 0] } },
+            },
+        },
+    ]);
+    const stats = statsResult[0] || {
+        totalVolume: 0,
+        highTrust: 0,
+        pendingAI: 0,
+        securityBlocks: 0,
+    };
+    delete stats._id;
+    const [requests, total] = await Promise.all([
+        verificationRequest_model_1.VerificationRequest.find(matchQuery)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate('vendorProfileId', 'companyName contactEmail'),
+        verificationRequest_model_1.VerificationRequest.countDocuments(matchQuery),
+    ]);
+    return {
+        stats,
+        requests: requests.map(r => ({
+            requestCode: r.requestCode,
+            vendorName: r.vendorProfileId?.companyName || r.guestDetails?.fullName || 'N/A',
+            vendorEmail: r.vendorProfileId?.contactEmail || r.vendorEmail || 'N/A',
+            paymentAmount: r.paymentAmount,
+            trustScore: r.trustScore ?? null,
+            status: r.status,
+            verdict: r.verdict ?? null,
+            createdAt: r.createdAt,
+        })),
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        },
+    };
+}
+async function getInstitutionRequestDetails(requestCode, institutionId) {
+    const request = await verificationRequest_model_1.VerificationRequest.findOne({
+        requestCode,
+        institutionId,
+    })
+        .populate('vendorProfileId', 'companyName contactEmail phoneNumber verificationStatus trustScore lastVerifiedAt')
+        .populate('verificationId');
+    if (!request)
+        throw new Error('Verification request not found');
+    const vendor = request.vendorProfileId;
+    return {
+        requestCode: request.requestCode,
+        status: request.status,
+        paymentAmount: request.paymentAmount,
+        paymentDescription: request.paymentDescription,
+        createdAt: request.createdAt,
+        expiresAt: request.expiresAt,
+        declinedAt: request.declinedAt,
+        declineReason: request.declineReason,
+        vendorName: vendor?.companyName || request.guestDetails?.fullName || 'N/A',
+        vendorEmail: vendor?.contactEmail || request.vendorEmail || 'N/A',
+        vendorPhone: vendor?.phoneNumber || request.vendorPhone || request.guestDetails?.phoneNumber || 'N/A',
+        vendorProfileId: vendor?._id || null,
+        isGuest: !!request.guestToken || !request.vendorProfileId,
+        trustScore: request.trustScore,
+        verdict: request.verdict,
+        subScores: request.subScores,
+        verificationId: request.verificationId?._id || request.verificationId,
+        verification: request.verificationId ? {
+            ...request.verificationId.toObject(),
+            flags: coatFlags(request.verificationId.flags),
+            claudeReasoning: sanitizeReasoning(request.verificationId.claudeReasoning)
+        } : null,
+        vendorJoinedAt: request.status !== 'pending_vendor_action' ? request.updatedAt : null,
+    };
+}
+async function approveVerificationRequest(requestCode, institutionId) {
+    const request = await verificationRequest_model_1.VerificationRequest.findOne({
+        requestCode,
+        institutionId,
+    });
+    if (!request)
+        throw new Error('Verification request not found');
+    if (request.status !== 'review') {
+        throw new Error('Only requests in "review" status can be manually approved');
+    }
+    request.status = 'trusted';
+    request.verdict = 'trusted';
+    request.trustScore = 100;
+    request.subScores = {
+        documentScore: 100,
+        anomalyScore: 100,
+        networkScore: 100
+    };
+    await request.save();
+    if (request.verificationId) {
+        await verification_model_1.Verification.findByIdAndUpdate(request.verificationId, {
+            verdict: 'trusted',
+            trustScore: 100,
+            subScores: {
+                documentScore: 100,
+                anomalyScore: 100,
+                networkScore: 100
+            }
+        });
+    }
+    return { message: 'Request manually approved' };
+}
+function coatFlags(flags) {
+    if (!flags || !Array.isArray(flags) || flags.length === 0)
+        return [];
+    const mapping = {
+        'BVN name mismatch': 'Identity detail discrepancy',
+        'BVN not found': 'Identity record not found',
+        'BVN date of birth mismatch': 'Identity detail discrepancy',
+        'RC Number mismatch': 'Business registration discrepancy',
+        'RC Number not found': 'Business registration not found',
+        'Document RC mismatch': 'Company name/RC mismatch',
+        'Document name mismatch': 'Identity name mismatch',
+        'Face mismatch': 'Biometric verification failure',
+        'Low trust score': 'General risk flag',
+        'Document tampered': 'Image integrity concern',
+        'Metadata discrepancy': 'Device/Metadata anomaly',
+    };
+    return flags.map(f => {
+        const flagStr = String(f);
+        if (mapping[flagStr] !== undefined)
+            return mapping[flagStr];
+        const lowerF = flagStr.toLowerCase();
+        if (lowerF.includes('bvn'))
+            return 'Identity record anomaly';
+        if (lowerF.includes('rc number') || lowerF.includes('cac'))
+            return 'Business record anomaly';
+        if (lowerF.includes('face') || lowerF.includes('biometric'))
+            return 'Biometric integrity flag';
+        if (lowerF.includes('document') || lowerF.includes('image') || lowerF.includes('tamper'))
+            return 'Document integrity flag';
+        if (lowerF.includes('location') || lowerF.includes('ip') || lowerF.includes('proxy'))
+            return 'Network anomaly detected';
+        return 'System security alert';
+    });
+}
+function sanitizeReasoning(reasoning) {
+    if (!reasoning)
+        return 'No analysis details available.';
+    let sanitized = reasoning.replace(/\b\d{11}\b/g, '[REDACTED ID]');
+    sanitized = sanitized.replace(/\b(RC|BN|IT|LLP|LP|CAC)\s?\d{5,10}\b/gi, '[REDACTED REG]');
+    sanitized = sanitized.replace(/\b(\+?234|0)\d{10}\b/g, '[REDACTED PHONE]');
+    sanitized = sanitized.replace(/(mismatch with|instead of|found|extracted)\s+['"][^'"]+['"]/gi, ' [REDACTED VALUE]');
+    return sanitized;
 }
 //# sourceMappingURL=verificationRequest.service.js.map

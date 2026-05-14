@@ -32,12 +32,24 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.uploadVerificationFiles = void 0;
 exports.createProfile = createProfile;
 exports.getProfile = getProfile;
 exports.updateProfile = updateProfile;
+exports.verifyProfile = verifyProfile;
+exports.getDashboard = getDashboard;
 const zod_1 = require("zod");
+const multer_1 = __importDefault(require("multer"));
 const IndividualService = __importStar(require("./individual.service"));
+const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+exports.uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 }
+]);
 const CreateProfileSchema = zod_1.z.object({
     fullName: zod_1.z.string().min(2, 'Full name is required'),
     bvn: zod_1.z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits'),
@@ -116,6 +128,40 @@ async function updateProfile(req, res, next) {
         const data = Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined));
         const profile = await IndividualService.updateIndividualProfile(req.params.id, data);
         return ok(res, profile);
+    }
+    catch (err) {
+        if (err instanceof Error && err.message.includes('not found')) {
+            return fail(res, err.message, 404);
+        }
+        next(err);
+    }
+}
+async function verifyProfile(req, res, next) {
+    try {
+        const files = req.files;
+        if (!files?.document?.[0]) {
+            return fail(res, 'Identity document file is required');
+        }
+        if (!files?.selfie?.[0]) {
+            return fail(res, 'Selfie image is required for face recognition');
+        }
+        const docBase64 = files.document[0].buffer.toString('base64');
+        const docMediaType = files.document[0].mimetype;
+        const selfieBase64 = files.selfie[0].buffer.toString('base64');
+        const result = await IndividualService.verifyIndividualProfileStandAlone(req.params.id, docBase64, selfieBase64, docMediaType);
+        return ok(res, result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+async function getDashboard(req, res, next) {
+    try {
+        const id = req.params.id || req.user?.userId;
+        if (!id)
+            return fail(res, 'Profile ID is required', 400);
+        const data = await IndividualService.getIndividualDashboard(id);
+        return ok(res, data);
     }
     catch (err) {
         if (err instanceof Error && err.message.includes('not found')) {

@@ -9,6 +9,7 @@ export interface IVerification extends Document {
         documentScore: number;
         anomalyScore: number;
         networkScore: number;
+        faceScore?: number;
     };
     flags: string[];
     claudeReasoning: string;

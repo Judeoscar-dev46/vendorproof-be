@@ -33,6 +33,7 @@ export declare function submitVendorVerification(requestCode: string, vendorProf
         documentScore: number;
         anomalyScore: number;
         networkScore: number;
+        faceScore?: number | undefined;
     };
     allFlags: string[];
     verdictSummary: string;
@@ -59,6 +60,7 @@ export declare function getRequestDetails(requestCode: string): Promise<{
     institutionName: any;
     expiresAt: Date;
     status: import("../../models/verificationRequest.model").VerificationRequestStatus;
+    verification: mongoose.Types.ObjectId | undefined;
 }>;
 export declare function joinVerificationRequestAsGuest(requestCode: string, guestDetails: {
     fullName: string;
@@ -91,6 +93,7 @@ export declare function submitGuestVendorVerification(requestCode: string, guest
         documentScore: number;
         anomalyScore: number;
         networkScore: number;
+        faceScore?: number | undefined;
     };
     canCreateAccount: boolean;
     prefillData: {
@@ -119,5 +122,52 @@ export declare function convertGuestToVendorProfile(requestCode: string, guestTo
         __v: number;
     };
     token: string;
+}>;
+export declare function getAllInstitutionRequests(institutionId: string, page?: number, limit?: number, status?: string, search?: string): Promise<{
+    stats: any;
+    requests: {
+        requestCode: string;
+        vendorName: any;
+        vendorEmail: any;
+        paymentAmount: number;
+        trustScore: number | null;
+        status: import("../../models/verificationRequest.model").VerificationRequestStatus;
+        verdict: "trusted" | "review" | "blocked" | null;
+        createdAt: Date;
+    }[];
+    pagination: {
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    };
+}>;
+export declare function getInstitutionRequestDetails(requestCode: string, institutionId: string): Promise<{
+    requestCode: string;
+    status: import("../../models/verificationRequest.model").VerificationRequestStatus;
+    paymentAmount: number;
+    paymentDescription: string;
+    createdAt: Date;
+    expiresAt: Date;
+    declinedAt: Date | undefined;
+    declineReason: string | undefined;
+    vendorName: any;
+    vendorEmail: any;
+    vendorPhone: any;
+    vendorProfileId: any;
+    isGuest: boolean;
+    trustScore: number | undefined;
+    verdict: "trusted" | "review" | "blocked" | undefined;
+    subScores: {
+        documentScore: number;
+        anomalyScore: number;
+        networkScore: number;
+    } | undefined;
+    verificationId: mongoose.Types.ObjectId | undefined;
+    verification: any;
+    vendorJoinedAt: any;
+}>;
+export declare function approveVerificationRequest(requestCode: string, institutionId: string): Promise<{
+    message: string;
 }>;
 //# sourceMappingURL=verificationRequest.service.d.ts.map

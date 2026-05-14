@@ -3,12 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendVerificationRequestNotification = sendVerificationRequestNotification;
 exports.sendSessionInviteNotification = sendSessionInviteNotification;
 const emailService_1 = require("./emailService");
+const termiiService_1 = require("./termiiService");
+const env_1 = require("../config/env");
 async function sendVerificationRequestNotification(payload) {
-    const link = `${process.env.APP_URL}/verify/${payload.requestCode}`;
+    const link = `${env_1.env.APP}/verify/${payload.requestCode}`;
     const message = `${payload.institutionName} wants to pay you ₦${payload.paymentAmount.toLocaleString()}. Verify your business securely at VendorProof to receive payment. Link: ${link} (expires ${payload.expiresAt.toLocaleString()})`;
     if (payload.recipientPhone) {
-        // await termii.sendSms(payload.recipientPhone, message);
-        console.log(`[SMS] → ${payload.recipientPhone}: ${message}`);
+        await (0, termiiService_1.sendSms)(payload.recipientPhone, message);
     }
     if (payload.recipientEmail) {
         await (0, emailService_1.sendEmail)({
@@ -28,14 +29,13 @@ async function sendVerificationRequestNotification(payload) {
                 </div>
             `
         });
-        console.log(`[EMAIL] → ${payload.recipientEmail}: ${message}`);
     }
 }
 async function sendSessionInviteNotification(payload) {
-    const link = `${process.env.APP_URL}/session/${payload.sessionCode}`;
+    const link = `${env_1.env.APP}/session/${payload.sessionCode}`;
     const message = `${payload.initiatorName} wants to send you ₦${payload.amount.toLocaleString()} for "${payload.description}". Both parties verify identity first. Join here: ${link} (expires in 2 hours)`;
     if (payload.recipientPhone) {
-        console.log(`[SMS] → ${payload.recipientPhone}: ${message}`);
+        await (0, termiiService_1.sendSms)(payload.recipientPhone, message);
     }
     if (payload.recipientEmail) {
         await (0, emailService_1.sendEmail)({

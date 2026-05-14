@@ -66,6 +66,15 @@ const TransactionSessionSchema = new mongoose_1.Schema({
     paymentReleasedAt: Date,
     blockedReason: String,
     expiresAt: { type: Date, required: true },
+    guestDetails: {
+        fullName: String,
+        phoneNumber: String,
+        bvn: String,
+        bankAccount: String,
+        bankCode: String,
+        dateOfBirth: Date,
+    },
+    guestToken: String,
 }, { timestamps: true });
 TransactionSessionSchema.index({ initiatorProfileId: 1 });
 TransactionSessionSchema.index({ recipientProfileId: 1 });

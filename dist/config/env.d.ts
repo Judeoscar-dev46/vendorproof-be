@@ -14,5 +14,6 @@ export declare const env: {
     TERMII_API_KEY: string;
     TERMII_SECRET_KEY: string;
     RESEND_API_KEY: string;
+    FACE_AI_SIDECAR_URL: string;
 };
 //# sourceMappingURL=env.d.ts.map
