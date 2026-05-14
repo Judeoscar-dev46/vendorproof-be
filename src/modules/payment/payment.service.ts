@@ -49,11 +49,40 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
         );
     }
 
-    const vendor = await VendorProfile.findById(verification.vendorId);
-    if (!vendor) throw new Error('Vendor not found');
+    let bankCode: string;
+    let bankAccount: string;
+    let vendorName: string;
+    let vendorId: string | undefined;
 
-    if (vendor.verificationStatus === 'blocked') {
-        throw new Error('Payment blocked: vendor account has been blocked since this verification was run');
+    const registeredVendor = await VendorProfile.findById(verification.vendorId);
+    if (registeredVendor) {
+        if (registeredVendor.verificationStatus === 'blocked') {
+            throw new Error('Payment blocked: vendor account has been blocked since this verification was run');
+        }
+        bankCode = registeredVendor.bankCode;
+        bankAccount = registeredVendor.bankAccount;
+        vendorName = registeredVendor.companyName;
+        vendorId = registeredVendor._id.toString();
+    } else if (verificationRequest) {
+        if (!verificationRequest.guestDetails?.bankAccount || !verificationRequest.guestDetails?.bankCode) {
+            throw new Error('Payment failed: Guest vendor bank details not found in request');
+        }
+        bankCode = verificationRequest.guestDetails.bankCode;
+        bankAccount = verificationRequest.guestDetails.bankAccount;
+        vendorName = verificationRequest.guestDetails.companyName || verificationRequest.guestDetails.fullName || 'Guest Vendor';
+    } else {
+        throw new Error('Vendor or Verification Request not found');
+    }
+
+    const resolvedAccount = await lookupAccount(bankCode, bankAccount);
+
+    const providedNameFirstWord = vendorName.toLowerCase().split(' ')[0] ?? '';
+    const nameMatch = resolvedAccount.account_name.toLowerCase().includes(providedNameFirstWord);
+
+    if (!nameMatch) {
+        throw new Error(
+            `Account name mismatch: Provided name "${vendorName}" vs Bank record "${resolvedAccount.account_name}". Please verify the details.`
+        );
     }
 
     const transactionRef = `${MERCHAT_ID}-${dto.verificationId}`;
@@ -61,9 +90,9 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
     const squadPayload = {
         transaction_reference: transactionRef,
         amount: `${Math.round(finalAmount * 100)}`,
-        bank_code: vendor.bankCode,
-        account_number: vendor.bankAccount,
-        account_name: vendor.companyName,
+        bank_code: bankCode,
+        account_number: bankAccount,
+        account_name: resolvedAccount.account_name,
         currency_id: 'NGN',
         remark: finalNarration ?? `VendorProof verified payment | Score: ${verification.trustScore}/100 | Ref: ${transactionRef}`,
     };
@@ -96,12 +125,14 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
 
     await AuditLog.create({
         action: 'PAYMENT_RELEASED',
-        vendorId: vendor._id,
+        vendorId: vendorId ? (vendorId as any) : undefined,
         referenceId: dto.verificationId,
         metadata: {
             transactionRef,
             amount: finalAmount,
             trustScore: verification.trustScore,
+            isGuest: !registeredVendor,
+            requestCode: verificationRequest?.requestCode,
         },
     });
 
@@ -109,7 +140,7 @@ export async function initiatePayment(dto: InitiatePaymentDTO): Promise<PaymentR
         transactionRef,
         amount: finalAmount,
         status: 'initiated',
-        vendorName: vendor.companyName,
+        vendorName: vendorName,
         trustScore: verification.trustScore,
         squadResponse,
     };
@@ -189,16 +220,20 @@ export async function lookupAccount(
     accountNumber: string
 ): Promise<{ account_number: string; account_name: string; bank_code: string }> {
     try {
-        const response = await axios.get(
+        const response = await axios.post(
             `${env.SQUAD_BASE_URL}/payout/account/lookup`,
             {
-                params: { account_number: accountNumber, bank_code: bankCode },
+                account_number: accountNumber,
+                bank_code: bankCode,
+            },
+            {
                 headers: {
                     Authorization: `Bearer ${env.SQUAD_SECRET_KEY}`,
                 },
                 timeout: 10000,
             }
         );
+        console.log(response.data)
         return response.data.data;
     } catch (err) {
         const axiosErr = err as AxiosError<{ message?: string }>;

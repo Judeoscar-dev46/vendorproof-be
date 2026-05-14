@@ -35,7 +35,6 @@ export async function sendVerificationRequestNotification(payload: {
                 </div>
             `
         });
-        console.log(`[EMAIL] → ${payload.recipientEmail}: ${message}`);
     }
 }
 

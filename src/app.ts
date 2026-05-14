@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import morgan from 'morgan';
 import mongoose from 'mongoose';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
@@ -14,9 +15,11 @@ import individualRouter from './modules/individual/individual.router';
 import institutionRouter from './modules/institution/institution.router';
 import verificationRequestRouter from './modules/verificationRequest/verificationRequest.router';
 import transactionSessionRouter from './modules/transactionSession/transactionSession.router';
+import auditLogRouter from './modules/auditLog/auditLog.router';
 
 const app = express();
 
+app.use(morgan('dev'));
 app.use(cors({
     origin: '*',
     credentials: true,
@@ -33,6 +36,7 @@ app.use('/api/individuals', individualRouter);
 app.use('/api/institutions', institutionRouter);
 app.use('/api/verification-requests', verificationRequestRouter);
 app.use('/api/sessions', transactionSessionRouter);
+app.use('/api/audit-logs', auditLogRouter);
 
 app.use(errorHandler);
 

@@ -254,6 +254,8 @@ async function evaluateSessionOutcome(session: ITransactionSession) {
             action: 'SESSION_BLOCKED',
             metadata: {
                 sessionCode: session.sessionCode,
+                initiatorProfileId: session.initiatorProfileId,
+                recipientProfileId: session.recipientProfileId,
                 initiatorScore: session.initiatorTrustScore,
                 recipientScore: session.recipientTrustScore,
                 initiatorVerdict: session.initiatorVerdict,
@@ -418,6 +420,8 @@ async function releaseSessionPayment(sessionCode: string) {
         metadata: {
             sessionCode,
             transactionRef,
+            initiatorProfileId: session.initiatorProfileId,
+            recipientProfileId: session.recipientProfileId,
             amount: session.amount,
             initiatorScore: session.initiatorTrustScore,
             recipientScore: session.recipientTrustScore,

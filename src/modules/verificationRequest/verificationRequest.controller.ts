@@ -297,3 +297,69 @@ export async function convertGuestAccount(req: Request, res: Response, next: Nex
         next(err);
     }
 }
+
+export async function getAllRequests(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const status = req.query.status as string;
+        const search = req.query.search as string;
+
+        const result = await VRService.getAllInstitutionRequests(
+            req.user.userId,
+            page,
+            limit,
+            status,
+            search
+        );
+
+        return ok(res, result);
+    } catch (err: unknown) {
+        next(err);
+    }
+}
+
+export async function getRequestDetailsForInstitution(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+
+        const result = await VRService.getInstitutionRequestDetails(
+            req.params.requestCode as string,
+            req.user.userId
+        );
+
+        return ok(res, result);
+    } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('not found')) {
+            return fail(res, err.message, 404);
+        }
+        next(err);
+    }
+}
+
+export async function approveRequest(req: Request, res: Response, next: NextFunction) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+
+        const result = await VRService.approveVerificationRequest(
+            req.params.requestCode as string,
+            req.user.userId
+        );
+
+        return ok(res, result);
+    } catch (err: unknown) {
+        if (err instanceof Error) {
+            if (err.message.includes('not found')) return fail(res, err.message, 404);
+            if (err.message.includes('Only requests in "review"')) return fail(res, err.message, 400);
+        }
+        next(err);
+    }
+}

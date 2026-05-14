@@ -31,6 +31,10 @@ export interface IVerificationRequest extends Document {
     guestDetails?: {
         fullName?: string;
         phoneNumber?: string;
+        bankAccount?: string;
+        bankCode?: string;
+        companyName?: string;
+        rcNumber?: string;
     };
     expiresAt: Date;
     declinedAt?: Date;
@@ -64,6 +68,10 @@ const VerificationRequestSchema = new Schema<IVerificationRequest>({
     guestDetails: {
         fullName: String,
         phoneNumber: String,
+        bankAccount: String,
+        bankCode: String,
+        companyName: String,
+        rcNumber: String,
     },
     expiresAt: { type: Date, required: true },
     declinedAt: Date,
