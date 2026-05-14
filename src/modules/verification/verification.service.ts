@@ -25,7 +25,7 @@ export async function runVerification(
     ]);
     console.log(docResult, anomalyResult, networkResult, "Results")
 
-    const aggregated = aggregateScores(docResult, anomalyResult, networkResult, undefined);
+    const aggregated = aggregateScores(docResult, anomalyResult, networkResult);
 
     const verification = await Verification.create({
         vendorId: vendor._id,

@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.analyseNetwork = analyseNetwork;
-const vendor_model_1 = require("../models/vendor.model");
+const vendorProfile_model_1 = require("../models/vendorProfile.model");
 const individualProfile_model_1 = require("../models/individualProfile.model");
 async function analyseNetwork(subjectId, bankAccount, bvnOrDirBvn, address, subjectType = 'vendor') {
     if (subjectType === 'individual') {
@@ -16,12 +16,12 @@ async function analyseVendorNetwork(vendorId, bankAccount, directorBvn, address)
         totalPenalty += penalty;
         flags.push(flag);
     };
-    const sharedBankVendors = await vendor_model_1.Vendor.find({
+    const sharedBankVendors = await vendorProfile_model_1.VendorProfile.find({
         bankAccount,
         _id: { $ne: vendorId },
-    }).select('companyName status');
+    }).select('companyName verificationStatus');
     if (sharedBankVendors.length > 0) {
-        const blockedCount = sharedBankVendors.filter(v => v.status === 'blocked').length;
+        const blockedCount = sharedBankVendors.filter(v => v.verificationStatus === 'blocked').length;
         if (blockedCount > 0) {
             applyPenalty(40, `Bank account shared with ${blockedCount} previously blocked vendor(s): ${sharedBankVendors.map(v => v.companyName).join(', ')}`);
         }
@@ -29,7 +29,9 @@ async function analyseVendorNetwork(vendorId, bankAccount, directorBvn, address)
             applyPenalty(20, `Bank account shared with ${sharedBankVendors.length} other vendor(s)`);
         }
     }
-    const sharedBvnVendors = await vendor_model_1.Vendor.find({
+    // NOTE: Shared BVN check won't work with random IV encryption unless we use a hash field.
+    // Keeping logic but it will likely find 0 matches for now.
+    const sharedBvnVendors = await vendorProfile_model_1.VendorProfile.find({
         directorBvn,
         _id: { $ne: vendorId },
     });
@@ -37,7 +39,7 @@ async function analyseVendorNetwork(vendorId, bankAccount, directorBvn, address)
         applyPenalty(30, `Director BVN linked to ${sharedBvnVendors.length + 1} vendor registrations`);
     }
     if (address) {
-        const sharedAddressVendors = await vendor_model_1.Vendor.find({
+        const sharedAddressVendors = await vendorProfile_model_1.VendorProfile.find({
             address: { $regex: address.substring(0, 20), $options: 'i' },
             _id: { $ne: vendorId },
         });

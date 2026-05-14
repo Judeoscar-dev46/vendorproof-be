@@ -14,7 +14,6 @@ const crypto_1 = __importDefault(require("crypto"));
 const env_1 = require("../../config/env");
 const verification_model_1 = require("../../models/verification.model");
 const verificationRequest_model_1 = require("../../models/verificationRequest.model");
-const vendor_model_1 = require("../../models/vendor.model");
 const auditLog_model_1 = require("../../models/auditLog.model");
 const wallet_service_1 = require("../wallet/wallet.service");
 const vendorProfile_model_1 = require("../../models/vendorProfile.model");
@@ -35,19 +34,46 @@ async function initiatePayment(dto) {
     if (verification.paymentReleased) {
         throw new Error(`Payment already released for this verification. Transaction ref: ${verification.squadTransactionRef}`);
     }
-    const vendor = await vendor_model_1.Vendor.findById(verification.vendorId);
-    if (!vendor)
-        throw new Error('Vendor not found');
-    if (vendor.status === 'blocked') {
-        throw new Error('Payment blocked: vendor account has been blocked since this verification was run');
+    let bankCode;
+    let bankAccount;
+    let vendorName;
+    let vendorId;
+    const registeredVendor = await vendorProfile_model_1.VendorProfile.findById(verification.vendorId);
+    if (registeredVendor) {
+        if (registeredVendor.verificationStatus === 'blocked') {
+            throw new Error('Payment blocked: vendor account has been blocked since this verification was run');
+        }
+        bankCode = registeredVendor.bankCode;
+        bankAccount = registeredVendor.bankAccount;
+        vendorName = registeredVendor.companyName;
+        vendorId = registeredVendor._id.toString();
     }
+    else if (verificationRequest) {
+        if (!verificationRequest.guestDetails?.bankAccount || !verificationRequest.guestDetails?.bankCode) {
+            throw new Error('Payment failed: Guest vendor bank details not found in request');
+        }
+        bankCode = verificationRequest.guestDetails.bankCode;
+        bankAccount = verificationRequest.guestDetails.bankAccount;
+        vendorName = verificationRequest.guestDetails.companyName || verificationRequest.guestDetails.fullName || 'Guest Vendor';
+    }
+    else {
+        throw new Error('Vendor or Verification Request not found');
+    }
+    const resolvedAccount = await lookupAccount(bankCode, bankAccount);
+    const providedNameFirstWord = vendorName.toLowerCase().split(' ')[0] ?? '';
+    const nameMatch = resolvedAccount.account_name.toLowerCase().includes(providedNameFirstWord);
+    // if (!nameMatch) {
+    //     throw new Error(
+    //         `Account name mismatch: Provided name "${vendorName}" vs Bank record "${resolvedAccount.account_name}". Please verify the details.`
+    //     );
+    // }
     const transactionRef = `${MERCHAT_ID}-${dto.verificationId}`;
     const squadPayload = {
         transaction_reference: transactionRef,
         amount: `${Math.round(finalAmount * 100)}`,
-        bank_code: vendor.bankCode,
-        account_number: vendor.bankAccount,
-        account_name: vendor.companyName,
+        bank_code: bankCode,
+        account_number: bankAccount,
+        account_name: resolvedAccount.account_name,
         currency_id: 'NGN',
         remark: finalNarration ?? `VendorProof verified payment | Score: ${verification.trustScore}/100 | Ref: ${transactionRef}`,
     };
@@ -63,6 +89,7 @@ async function initiatePayment(dto) {
         squadResponse = response.data;
     }
     catch (err) {
+        console.log(err);
         const axiosErr = err;
         const squadMessage = axiosErr.response?.data?.message ?? axiosErr.message;
         throw new Error(`Squad API error: ${squadMessage}`);
@@ -73,19 +100,21 @@ async function initiatePayment(dto) {
     });
     await auditLog_model_1.AuditLog.create({
         action: 'PAYMENT_RELEASED',
-        vendorId: vendor._id,
+        vendorId: vendorId ? vendorId : undefined,
         referenceId: dto.verificationId,
         metadata: {
             transactionRef,
             amount: finalAmount,
             trustScore: verification.trustScore,
+            isGuest: !registeredVendor,
+            requestCode: verificationRequest?.requestCode,
         },
     });
     return {
         transactionRef,
         amount: finalAmount,
         status: 'initiated',
-        vendorName: vendor.companyName,
+        vendorName: vendorName,
         trustScore: verification.trustScore,
         squadResponse,
     };
@@ -127,7 +156,6 @@ async function getPaymentStatus(verificationId) {
         squadStatus,
     };
 }
-
 async function getVendorPayments(vendorId) {
     const vendor = await vendorProfile_model_1.VendorProfile.findById(vendorId);
     if (!vendor)
@@ -150,11 +178,12 @@ async function getVendorPayments(vendorId) {
         payments,
     };
 }
-
 async function lookupAccount(bankCode, accountNumber) {
     try {
-        const response = await axios_1.default.get(`${env_1.env.SQUAD_BASE_URL}/payout/account/lookup`, {
-            params: { account_number: accountNumber, bank_code: bankCode },
+        const response = await axios_1.default.post(`${env_1.env.SQUAD_BASE_URL}/payout/account/lookup`, {
+            account_number: accountNumber,
+            bank_code: bankCode,
+        }, {
             headers: {
                 Authorization: `Bearer ${env_1.env.SQUAD_SECRET_KEY}`,
             },
@@ -168,7 +197,6 @@ async function lookupAccount(bankCode, accountNumber) {
         throw new Error(`Account lookup failed: ${msg}`);
     }
 }
-
 async function fundTransfer(dto) {
     try {
         const response = await axios_1.default.post(`${env_1.env.SQUAD_BASE_URL}/payout/initiate`, {

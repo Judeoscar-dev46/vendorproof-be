@@ -21,6 +21,15 @@ export interface ITransactionSession extends Document {
     paymentReleasedAt?: Date;
     blockedReason?: string;
     expiresAt: Date;
+    guestDetails?: {
+        fullName: string;
+        phoneNumber: string;
+        bvn?: string;
+        bankAccount?: string;
+        bankCode?: string;
+        dateOfBirth?: Date;
+    };
+    guestToken?: string;
     createdAt: Date;
 }
 export declare const TransactionSession: mongoose.Model<ITransactionSession, {}, {}, {}, mongoose.Document<unknown, {}, ITransactionSession, {}, mongoose.DefaultSchemaOptions> & ITransactionSession & Required<{

@@ -16,12 +16,15 @@ function buildVerdictSummary(score, verdict, flags, subScores, mode) {
     const flagSummary = flags.length > 0
         ? ` Key concerns: ${flags.slice(0, 3).join('; ')}${flags.length > 3 ? ` and ${flags.length - 3} more` : ''}.`
         : '';
-    const sortedEntries = Object.entries(subScores).sort(([, a], [, b]) => a - b);
+    const sortedEntries = Object.entries(subScores)
+        .filter(([, val]) => val !== undefined)
+        .sort(([, a], [, b]) => a - b);
     const weakestArea = (sortedEntries[0]?.[0] ?? 'analysis')
         .replace('Score', '')
         .replace('document', 'document analysis')
         .replace('anomaly', 'anomaly detection')
-        .replace('network', 'network analysis');
+        .replace('network', 'network analysis')
+        .replace('face', 'facial recognition');
     if (verdict === 'review') {
         return `This ${mode === 'vendor' ? 'vendor' : 'individual'} requires manual review (score: ${score}/100). The weakest signal came from ${weakestArea}.${flagSummary} A compliance officer should review before approving payment.`;
     }
@@ -52,12 +55,15 @@ function aggregateScores(doc, anomaly, network) {
     };
 }
 const INDIVIDUAL_WEIGHTS = {
-    identity: 0.50,
-    anomaly: 0.30,
-    network: 0.20,
+    identity: 0.40,
+    face: 0.25,
+    anomaly: 0.20,
+    network: 0.15,
 };
-function aggregateIndividualScores(identity, anomaly, network) {
+function aggregateIndividualScores(identity, anomaly, network, face) {
+    const faceScore = face?.score ?? 100; // default to 100 if no face data provided (fallback)
     const rawScore = Math.round(identity.score * INDIVIDUAL_WEIGHTS.identity +
+        faceScore * INDIVIDUAL_WEIGHTS.face +
         anomaly.score * INDIVIDUAL_WEIGHTS.anomaly +
         network.score * INDIVIDUAL_WEIGHTS.network);
     let trustScore = rawScore;
@@ -70,12 +76,17 @@ function aggregateIndividualScores(identity, anomaly, network) {
     if (!identity.nameMatchesClaimed && !identity.dobMatchesClaimed) {
         trustScore = Math.min(trustScore, 25);
     }
+    if (face && !face.match) {
+        // If face match fails significantly, cap the trust score
+        trustScore = Math.min(trustScore, face.verdict === 'mismatch' ? 20 : 45);
+    }
     const verdict = deriveVerdict(trustScore);
     const allFlags = [...identity.flags, ...anomaly.flags, ...network.flags];
     const subScores = {
         documentScore: identity.score,
         anomalyScore: anomaly.score,
         networkScore: network.score,
+        faceScore: face?.score,
     };
     if (trustScore < rawScore) {
         allFlags.unshift(`Trust score reduced from ${rawScore} to ${trustScore} due to a hard override condition`);

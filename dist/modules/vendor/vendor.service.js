@@ -6,18 +6,22 @@ exports.getAllVendors = getAllVendors;
 exports.updateVendorStatus = updateVendorStatus;
 exports.deleteVendor = deleteVendor;
 exports.getVendorWithVerifications = getVendorWithVerifications;
-const vendor_model_1 = require("../../models/vendor.model");
+const vendorProfile_model_1 = require("../../models/vendorProfile.model");
 const verification_model_1 = require("../../models/verification.model");
+const crypto_1 = require("../../utils/crypto");
 async function createVendor(dto) {
-    const existing = await vendor_model_1.Vendor.findOne({ rcNumber: dto.rcNumber });
+    const existing = await vendorProfile_model_1.VendorProfile.findOne({ rcNumber: dto.rcNumber });
     if (existing) {
         throw new Error(`A vendor with RC number ${dto.rcNumber} already exists`);
     }
-    const vendor = await vendor_model_1.Vendor.create(dto);
+    const vendor = await vendorProfile_model_1.VendorProfile.create({
+        ...dto,
+        directorBvn: (0, crypto_1.encrypt)(dto.directorBvn),
+    });
     return vendor;
 }
 async function getVendorById(id) {
-    const vendor = await vendor_model_1.Vendor.findById(id);
+    const vendor = await vendorProfile_model_1.VendorProfile.findById(id);
     if (!vendor)
         throw new Error('Vendor not found');
     return vendor;
@@ -28,7 +32,7 @@ async function getAllVendors(filters) {
     const skip = (page - 1) * limit;
     const query = {};
     if (filters.status) {
-        query.status = filters.status;
+        query.verificationStatus = filters.status;
     }
     if (filters.search) {
         query.$or = [
@@ -38,12 +42,12 @@ async function getAllVendors(filters) {
         ];
     }
     const [vendors, total] = await Promise.all([
-        vendor_model_1.Vendor.find(query)
+        vendorProfile_model_1.VendorProfile.find(query)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
             .select('-directorBvn -bankAccount'),
-        vendor_model_1.Vendor.countDocuments(query),
+        vendorProfile_model_1.VendorProfile.countDocuments(query),
     ]);
     return {
         vendors,
@@ -53,15 +57,15 @@ async function getAllVendors(filters) {
     };
 }
 async function updateVendorStatus(id, status, reason) {
-    const vendor = await vendor_model_1.Vendor.findById(id);
+    const vendor = await vendorProfile_model_1.VendorProfile.findById(id);
     if (!vendor)
         throw new Error('Vendor not found');
-    vendor.status = status;
+    vendor.verificationStatus = status;
     await vendor.save();
     return vendor;
 }
 async function deleteVendor(id) {
-    const vendor = await vendor_model_1.Vendor.findById(id);
+    const vendor = await vendorProfile_model_1.VendorProfile.findById(id);
     if (!vendor)
         throw new Error('Vendor not found');
     const paidVerification = await verification_model_1.Verification.findOne({
@@ -71,11 +75,11 @@ async function deleteVendor(id) {
     if (paidVerification) {
         throw new Error('Cannot delete a vendor with released payments — archive instead');
     }
-    await vendor_model_1.Vendor.findByIdAndDelete(id);
+    await vendorProfile_model_1.VendorProfile.findByIdAndDelete(id);
     await verification_model_1.Verification.deleteMany({ vendorId: id });
 }
 async function getVendorWithVerifications(id) {
-    const vendor = await vendor_model_1.Vendor.findById(id);
+    const vendor = await vendorProfile_model_1.VendorProfile.findById(id);
     if (!vendor)
         throw new Error('Vendor not found');
     const verifications = await verification_model_1.Verification.find({ vendorId: id })

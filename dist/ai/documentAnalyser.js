@@ -24,7 +24,7 @@ Analyse the attached document and return ONLY a JSON object with this exact stru
   "rcMatch": <true/false>,
   "documentType": "<e.g. CAC Certificate, Tax Clearance, Contract>",
   "flags": ["<any anomalies found>"],
-  "reasoning": "<2-3 sentence explanation of your score>"
+  "reasoning": "<2-3 sentence explanation of your score. IMPORTANT: To protect privacy, do not include specific PII such as full BVNs, RC Numbers, or direct name/date values. Use generic terms like 'identity record discrepancy' or 'registration detail mismatch' so this can be safely shared with institutions.>"
 }`;
     const documentContent = mediaType === 'application/pdf'
         ? [

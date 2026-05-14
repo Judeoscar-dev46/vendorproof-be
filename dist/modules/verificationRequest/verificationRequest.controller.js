@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadDocument = void 0;
+exports.uploadDocument = exports.uploadVerificationFiles = void 0;
 exports.createRequest = createRequest;
 exports.joinRequest = joinRequest;
 exports.declineRequest = declineRequest;
@@ -46,10 +46,17 @@ exports.getDetails = getDetails;
 exports.joinRequestGuest = joinRequestGuest;
 exports.submitVerificationGuest = submitVerificationGuest;
 exports.convertGuestAccount = convertGuestAccount;
+exports.getAllRequests = getAllRequests;
+exports.getRequestDetailsForInstitution = getRequestDetailsForInstitution;
+exports.approveRequest = approveRequest;
 const zod_1 = require("zod");
 const multer_1 = __importDefault(require("multer"));
 const VRService = __importStar(require("./verificationRequest.service"));
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+exports.uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 }
+]);
 exports.uploadDocument = upload.single('document');
 const CreateRequestSchema = zod_1.z.object({
     institutionId: zod_1.z.string().min(1, 'Institution ID is required'),
@@ -258,10 +265,10 @@ async function submitVerificationGuest(req, res, next) {
         if (!parsed.success) {
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
-        const base64 = req.file.buffer.toString('base64');
-        const mediaType = req.file.mimetype;
+        const docBase64 = req.file.buffer.toString('base64');
+        const docMediaType = req.file.mimetype;
         const { guestToken, invoiceAmount, ...guestDetails } = parsed.data;
-        const result = await VRService.submitGuestVendorVerification(req.params.requestCode, guestToken, guestDetails, base64, mediaType, invoiceAmount);
+        const result = await VRService.submitGuestVendorVerification(req.params.requestCode, guestToken, guestDetails, docBase64, docMediaType, invoiceAmount);
         return ok(res, result);
     }
     catch (err) {
@@ -292,6 +299,55 @@ async function convertGuestAccount(req, res, next) {
                 return fail(res, err.message, 404);
             if (err.message.includes('already exists'))
                 return fail(res, err.message, 409);
+        }
+        next(err);
+    }
+}
+async function getAllRequests(req, res, next) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 50;
+        const status = req.query.status;
+        const search = req.query.search;
+        const result = await VRService.getAllInstitutionRequests(req.user.userId, page, limit, status, search);
+        return ok(res, result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+async function getRequestDetailsForInstitution(req, res, next) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+        const result = await VRService.getInstitutionRequestDetails(req.params.requestCode, req.user.userId);
+        return ok(res, result);
+    }
+    catch (err) {
+        if (err instanceof Error && err.message.includes('not found')) {
+            return fail(res, err.message, 404);
+        }
+        next(err);
+    }
+}
+async function approveRequest(req, res, next) {
+    try {
+        if (!req.user || req.user.role !== 'institution') {
+            return fail(res, 'Unauthorized institution access', 403);
+        }
+        const result = await VRService.approveVerificationRequest(req.params.requestCode, req.user.userId);
+        return ok(res, result);
+    }
+    catch (err) {
+        if (err instanceof Error) {
+            if (err.message.includes('not found'))
+                return fail(res, err.message, 404);
+            if (err.message.includes('Only requests in "review"'))
+                return fail(res, err.message, 400);
         }
         next(err);
     }

@@ -4,8 +4,11 @@ const express_1 = require("express");
 const auth_1 = require("../../middleware/auth");
 const verificationRequest_controller_1 = require("./verificationRequest.controller");
 const router = (0, express_1.Router)();
-// Institution: create a verification request for a vendor
+// Institution: create, list or approve verification requests
 router.post('/', auth_1.authenticate, verificationRequest_controller_1.createRequest);
+router.get('/', auth_1.authenticate, verificationRequest_controller_1.getAllRequests);
+router.get('/:requestCode', auth_1.authenticate, verificationRequest_controller_1.getRequestDetailsForInstitution);
+router.patch('/:requestCode/approve', auth_1.authenticate, verificationRequest_controller_1.approveRequest);
 // Institution: poll request status
 router.get('/:requestCode/status', auth_1.authenticate, verificationRequest_controller_1.getRequestStatus);
 // Vendor: join, decline, or submit documents for a request

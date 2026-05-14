@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Verification = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const VerificationSchema = new mongoose_1.Schema({
-    vendorId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Vendor' },
+    vendorId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'VendorProfile' },
     subjectId: { type: mongoose_1.Schema.Types.ObjectId },
     subjectType: { type: String, enum: ['vendor', 'individual'] },
     trustScore: { type: Number, required: true },
@@ -45,6 +45,7 @@ const VerificationSchema = new mongoose_1.Schema({
         documentScore: Number,
         anomalyScore: Number,
         networkScore: Number,
+        faceScore: Number,
     },
     flags: [String],
     claudeReasoning: String,
