@@ -86,7 +86,6 @@ export const getWalletByOwner = async (req: Request, res: Response, next: NextFu
 
 export const simulateFunding = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        console.log(req.body)
         const parsed = SimulateFundingSchema.safeParse(req.body);
         if (!parsed.success) {
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
