@@ -48,6 +48,9 @@ async function runVendorVerification(vendor, documentBase64, mediaType, invoiceA
     return { ...aggregated, verificationId: verification._id };
 }
 async function runIndividualVerification(profile, documentBase64, selfieBase64, mediaType, transactionAmount) {
+    if (!profile.bvn || !profile.dateOfBirth || !profile.bankAccount) {
+        throw new Error('Incomplete profile: BVN, Date of Birth, and Bank Account are required for verification');
+    }
     const plainBvn = (0, crypto_1.decrypt)(profile.bvn);
     const [identityResult, anomalyResult, networkResult, faceResult] = await Promise.all([
         (0, identityAnalyser_1.analyseIdentityDocument)(documentBase64, mediaType, {

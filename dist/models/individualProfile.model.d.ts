@@ -1,12 +1,12 @@
 import mongoose, { Document } from 'mongoose';
 export interface IIndividualProfile extends Document {
     fullName: string;
-    bvn: string;
+    bvn?: string;
     ninNumber?: string;
-    bankAccount: string;
-    bankCode: string;
-    phoneNumber: string;
-    dateOfBirth: Date;
+    bankAccount?: string;
+    bankCode?: string;
+    phoneNumber?: string;
+    dateOfBirth?: Date;
     email?: string;
     passwordHash: string;
     trustScore?: number;

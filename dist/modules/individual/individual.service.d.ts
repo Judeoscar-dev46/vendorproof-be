@@ -2,13 +2,13 @@ import { IIndividualProfile } from '../../models/individualProfile.model';
 import { SupportedMediaType } from '../../ai/documentAnalyser';
 export interface CreateIndividualProfileDTO {
     fullName: string;
-    bvn: string;
-    ninNumber?: string;
-    bankAccount: string;
-    bankCode: string;
-    phoneNumber: string;
-    dateOfBirth: string;
-    email?: string;
+    bvn?: string | undefined;
+    ninNumber?: string | undefined;
+    bankAccount?: string | undefined;
+    bankCode?: string | undefined;
+    phoneNumber?: string | undefined;
+    dateOfBirth?: string | undefined;
+    email?: string | undefined;
     passwordRaw: string;
 }
 export declare function createIndividualProfile(dto: CreateIndividualProfileDTO): Promise<IIndividualProfile>;

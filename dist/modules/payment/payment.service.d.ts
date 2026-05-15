@@ -1,3 +1,4 @@
+import { ScreenshotAnalysisResult } from '../../ai/transferScreenshotAnalyser';
 export interface InitiatePaymentDTO {
     verificationId: string;
     amount?: number | undefined;
@@ -63,4 +64,17 @@ export declare function fundTransfer(dto: {
     remark: string;
 }): Promise<Record<string, unknown>>;
 export declare function processWebhook(payload: Record<string, unknown>, signature: string): Promise<void>;
+export declare function analyseTransfer(file: Express.Multer.File, claimedDetails: {
+    amount: number;
+    senderName?: string | undefined;
+    date?: string | undefined;
+}): Promise<{
+    screenshot: string;
+    result: ScreenshotAnalysisResult;
+}>;
+export declare function verifyPayment(verificationId: string, file: Express.Multer.File): Promise<{
+    verificationId: string;
+    screenshot: string;
+    result: ScreenshotAnalysisResult;
+}>;
 //# sourceMappingURL=payment.service.d.ts.map

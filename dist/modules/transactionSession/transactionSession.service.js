@@ -305,6 +305,9 @@ async function releaseSessionPayment(sessionCode) {
             .select('+bankAccount');
         if (!recipient)
             throw new Error('Recipient profile not found');
+        if (!recipient.bankAccount || !recipient.bankCode) {
+            throw new Error('Recipient bank details are incomplete');
+        }
         bankAccount = recipient.bankAccount;
         bankCode = recipient.bankCode;
         fullName = recipient.fullName;

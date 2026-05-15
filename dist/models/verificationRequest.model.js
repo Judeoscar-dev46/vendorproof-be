@@ -67,6 +67,8 @@ const VerificationRequestSchema = new mongoose_1.Schema({
         rcNumber: String,
     },
     expiresAt: { type: Date, required: true },
+    senderName: String,
+    paymentDate: String,
     declinedAt: Date,
     declineReason: String,
 }, { timestamps: true });

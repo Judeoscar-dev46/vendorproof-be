@@ -18,23 +18,24 @@ const orchestrator_1 = require("../../ai/orchestrator");
 const wallet_model_1 = require("../../models/wallet.model");
 const transactionSession_model_1 = require("../../models/transactionSession.model");
 async function createIndividualProfile(dto) {
-    const existing = await individualProfile_model_1.IndividualProfile.findOne({ phoneNumber: dto.phoneNumber });
-    if (existing) {
-        throw new Error(`An individual profile with phone number ${dto.phoneNumber} already exists`);
+    if (dto.phoneNumber) {
+        const existing = await individualProfile_model_1.IndividualProfile.findOne({ phoneNumber: dto.phoneNumber });
+        if (existing) {
+            throw new Error(`An individual profile with phone number ${dto.phoneNumber} already exists`);
+        }
     }
     const salt = await bcrypt_1.default.genSalt(10);
     const passwordHash = await bcrypt_1.default.hash(dto.passwordRaw, salt);
-    const encryptedBvn = (0, crypto_1.encrypt)(dto.bvn);
     const profile = await individualProfile_model_1.IndividualProfile.create({
         fullName: dto.fullName,
-        bvn: encryptedBvn,
-        bankAccount: dto.bankAccount,
-        bankCode: dto.bankCode,
-        phoneNumber: dto.phoneNumber,
-        dateOfBirth: new Date(dto.dateOfBirth),
+        passwordHash,
+        ...(dto.bvn !== undefined && { bvn: (0, crypto_1.encrypt)(dto.bvn) }),
+        ...(dto.bankAccount !== undefined && { bankAccount: dto.bankAccount }),
+        ...(dto.bankCode !== undefined && { bankCode: dto.bankCode }),
+        ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
+        ...(dto.dateOfBirth !== undefined && { dateOfBirth: new Date(dto.dateOfBirth) }),
         ...(dto.ninNumber !== undefined && { ninNumber: dto.ninNumber }),
         ...(dto.email !== undefined && { email: dto.email }),
-        passwordHash,
     });
     const profileObj = profile.toObject();
     delete profileObj.passwordHash;
