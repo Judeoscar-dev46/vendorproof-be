@@ -4,6 +4,7 @@ import {
     createWallet as createWalletService,
     getWalletById,
     getWalletByOwner as getWalletByOwnerService,
+    simulateFunding as simulateFundingService,
 } from './wallet.service';
 
 const CreateWalletSchema = z.object({
@@ -14,6 +15,11 @@ const CreateWalletSchema = z.object({
     gender: z.enum(['male', 'female']),
     email: z.string().email('Invalid email').optional(),
     accountNumber: z.string().regex(/^\d{10}$/, 'Account number must be 10 digits').optional(),
+});
+
+const SimulateFundingSchema = z.object({
+    accountNumber: z.string().min(1, 'Account number is required'),
+    amount: z.number().positive('Amount must be greater than 0'),
 });
 
 function ok(res: Response, data: unknown, status = 200) {
@@ -74,6 +80,20 @@ export const getWalletByOwner = async (req: Request, res: Response, next: NextFu
         if (err instanceof Error && err.message.includes('not found')) {
             return fail(res, err.message, 404);
         }
+        next(err);
+    }
+};
+
+export const simulateFunding = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const parsed = SimulateFundingSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return fail(res, parsed.error.issues.map(e => e.message).join(', '));
+        }
+
+        const result = await simulateFundingService(parsed.data.accountNumber, parsed.data.amount);
+        return ok(res, result);
+    } catch (err: unknown) {
         next(err);
     }
 };
