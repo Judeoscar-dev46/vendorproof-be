@@ -213,3 +213,19 @@ export async function debitWallet(
         },
     });
 }
+
+export async function simulateFunding(accountNumber: string, amount: number) {
+    const payload = {
+        virtual_account_number: accountNumber,
+        amount: amount.toString(),
+    };
+
+    const res = await axios.post(`${env.SQUAD_BASE_URL}/virtual-account/simulate/payment`, payload, {
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${env.SQUAD_SECRET_KEY}`
+        },
+    });
+
+    return res.data;
+}
