@@ -58,6 +58,10 @@ export async function runIndividualVerification(
     mediaType: SupportedMediaType,
     transactionAmount?: number
 ) {
+    if (!profile.bvn || !profile.dateOfBirth || !profile.bankAccount) {
+        throw new Error('Incomplete profile: BVN, Date of Birth, and Bank Account are required for verification');
+    }
+
     const plainBvn = decrypt(profile.bvn);
 
     const [identityResult, anomalyResult, networkResult, faceResult] = await Promise.all([

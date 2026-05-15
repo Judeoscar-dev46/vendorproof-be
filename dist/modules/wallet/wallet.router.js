@@ -7,5 +7,6 @@ const router = (0, express_1.Router)();
 router.get('/owner/:ownerId', auth_1.authenticate, wallet_controller_1.getWalletByOwner);
 router.get('/:id', auth_1.authenticate, wallet_controller_1.getWalletDetails);
 router.post('/', auth_1.authenticate, wallet_controller_1.createWallet);
+router.post('/simulate-funding', auth_1.authenticate, wallet_controller_1.simulateFunding);
 exports.default = router;
 //# sourceMappingURL=wallet.router.js.map

@@ -37,12 +37,12 @@ exports.IndividualProfile = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const IndividualProfileSchema = new mongoose_1.Schema({
     fullName: { type: String, required: true },
-    bvn: { type: String, required: true, select: false },
+    bvn: { type: String, select: false },
     ninNumber: { type: String, select: false },
-    bankAccount: { type: String, required: true, select: false },
-    bankCode: { type: String, required: true },
-    phoneNumber: { type: String, required: true, unique: true },
-    dateOfBirth: { type: Date, required: true },
+    bankAccount: { type: String, select: false },
+    bankCode: { type: String },
+    phoneNumber: { type: String, unique: true, sparse: true },
+    dateOfBirth: { type: Date },
     email: { type: String },
     passwordHash: { type: String, required: true, select: false },
     trustScore: Number,

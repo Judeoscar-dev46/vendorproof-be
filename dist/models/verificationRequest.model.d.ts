@@ -28,6 +28,8 @@ export interface IVerificationRequest extends Document {
         rcNumber?: string;
     };
     expiresAt: Date;
+    senderName?: string;
+    paymentDate?: string;
     declinedAt?: Date;
     declineReason?: string;
     createdAt: Date;

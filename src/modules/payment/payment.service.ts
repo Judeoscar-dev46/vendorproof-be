@@ -1,11 +1,14 @@
 import axios, { AxiosError } from 'axios';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { env } from '../../config/env';
 import { Verification } from '../../models/verification.model';
 import { VerificationRequest } from '../../models/verificationRequest.model';
 import { AuditLog } from '../../models/auditLog.model';
 import { creditWalletByVirtualAccount } from '../wallet/wallet.service'
 import { VendorProfile } from '../../models/vendorProfile.model';
+import { analyseTransferScreenshot, ScreenshotAnalysisResult } from '../../ai/transferScreenshotAnalyser';
 
 export interface InitiatePaymentDTO {
     verificationId: string;
@@ -326,4 +329,64 @@ export async function processWebhook(
         referenceId: String(verification._id),
         metadata: { transaction_ref, status, rawPayload: payload },
     });
+}
+
+export async function analyseTransfer(
+    file: Express.Multer.File,
+    claimedDetails: { amount: number; senderName?: string | undefined; date?: string | undefined }
+): Promise<{ screenshot: string; result: ScreenshotAnalysisResult }> {
+    try {
+        const screenshot = file.buffer;
+        const mediaType = file.mimetype as 'image/jpeg' | 'image/png';
+
+        const result = await analyseTransferScreenshot(screenshot.toString('base64'), mediaType, {
+            amount: claimedDetails.amount,
+            senderName: claimedDetails.senderName,
+            date: claimedDetails.date,
+        });
+
+        const filename = `manual-${Date.now()}.png`;
+        const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'screenshots');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filepath = path.join(uploadDir, filename);
+        fs.writeFileSync(filepath, screenshot);
+
+        return {
+            screenshot: filename,
+            result,
+        };
+    } catch (error) {
+        throw error;
+    }
+}
+
+export async function verifyPayment(verificationId: string, file: Express.Multer.File): Promise<{ verificationId: string; screenshot: string; result: ScreenshotAnalysisResult }> {
+    try {
+        const verificationRequest = await VerificationRequest.findById(verificationId);
+
+        if (!verificationRequest) {
+            throw new Error('Verification request not found');
+        }
+
+        const analysis = await analyseTransfer(file, {
+            amount: verificationRequest.paymentAmount,
+            senderName: verificationRequest.senderName,
+            date: verificationRequest.paymentDate,
+        });
+
+        // Update verification status
+        await Verification.findByIdAndUpdate(verificationId, {
+            verdict: analysis.result.verdict,
+            trustScore: analysis.result.authenticityScore,
+        });
+
+        return {
+            verificationId,
+            ...analysis,
+        };
+    } catch (error) {
+        throw error;
+    }
 }

@@ -37,6 +37,8 @@ export interface IVerificationRequest extends Document {
         rcNumber?: string;
     };
     expiresAt: Date;
+    senderName?: string;
+    paymentDate?: string;
     declinedAt?: Date;
     declineReason?: string;
     createdAt: Date;
@@ -74,6 +76,8 @@ const VerificationRequestSchema = new Schema<IVerificationRequest>({
         rcNumber: String,
     },
     expiresAt: { type: Date, required: true },
+    senderName: String,
+    paymentDate: String,
     declinedAt: Date,
     declineReason: String,
 }, { timestamps: true });

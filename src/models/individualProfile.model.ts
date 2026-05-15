@@ -2,12 +2,12 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IIndividualProfile extends Document {
     fullName: string;
-    bvn: string;
+    bvn?: string;
     ninNumber?: string;
-    bankAccount: string;
-    bankCode: string;
-    phoneNumber: string;
-    dateOfBirth: Date;
+    bankAccount?: string;
+    bankCode?: string;
+    phoneNumber?: string;
+    dateOfBirth?: Date;
     email?: string;
     passwordHash: string;
     trustScore?: number;
@@ -19,12 +19,12 @@ export interface IIndividualProfile extends Document {
 
 const IndividualProfileSchema = new Schema<IIndividualProfile>({
     fullName: { type: String, required: true },
-    bvn: { type: String, required: true, select: false },
+    bvn: { type: String, select: false },
     ninNumber: { type: String, select: false },
-    bankAccount: { type: String, required: true, select: false },
-    bankCode: { type: String, required: true },
-    phoneNumber: { type: String, required: true, unique: true },
-    dateOfBirth: { type: Date, required: true },
+    bankAccount: { type: String, select: false },
+    bankCode: { type: String },
+    phoneNumber: { type: String, unique: true, sparse: true },
+    dateOfBirth: { type: Date },
     email: { type: String },
     passwordHash: { type: String, required: true, select: false },
     trustScore: Number,

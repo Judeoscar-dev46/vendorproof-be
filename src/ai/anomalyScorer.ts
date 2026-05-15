@@ -1,5 +1,5 @@
 export interface AnomalyResult {
-    score: number;    // 0–100, higher = less anomalous
+    score: number;
     flags: string[];
     penalties: { rule: string; penalty: number }[];
 }

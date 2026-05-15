@@ -36,19 +36,36 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.uploadDocument = exports.uploadVerificationFiles = void 0;
 exports.initiatePayment = initiatePayment;
 exports.getPaymentStatus = getPaymentStatus;
 exports.getVendorPayments = getVendorPayments;
 exports.handleSquadWebhook = handleSquadWebhook;
 exports.getBanks = getBanks;
+exports.verifyPayment = verifyPayment;
+exports.analyseScreenshot = analyseScreenshot;
 const zod_1 = require("zod");
-const PaymentService = __importStar(require("./payment.service"));
+const multer_1 = __importDefault(require("multer"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const PaymentService = __importStar(require("./payment.service"));
+const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+exports.uploadVerificationFiles = upload.fields([
+    { name: 'document', maxCount: 1 },
+]);
+exports.uploadDocument = upload.single('document');
 const InitiatePaymentSchema = zod_1.z.object({
     verificationId: zod_1.z.string().min(1, 'Verification ID is required'),
     amount: zod_1.z.number().positive('Amount must be greater than 0').optional(),
     narration: zod_1.z.string().max(100).optional(),
+});
+const VerifyPaymentSchema = zod_1.z.object({
+    verificationId: zod_1.z.string().min(1, 'Verification ID is required'),
+});
+const AnalyseScreenshotSchema = zod_1.z.object({
+    amount: zod_1.z.string().transform((val) => Number(val)).pipe(zod_1.z.number().positive('Amount must be greater than 0')),
+    senderName: zod_1.z.string().optional(),
+    date: zod_1.z.string().optional(),
 });
 function ok(res, data, status = 200) {
     return res.status(status).json({ success: true, data });
@@ -135,6 +152,44 @@ async function getBanks(req, res, next) {
     }
     catch (err) {
         next(err);
+    }
+}
+async function verifyPayment(req, res, next) {
+    try {
+        const parsedData = VerifyPaymentSchema.safeParse(req.body);
+        if (!parsedData.success) {
+            return fail(res, parsedData.error.issues.map(e => e.message).join(', '));
+        }
+        const file = req.file;
+        const { verificationId } = parsedData.data;
+        if (!file) {
+            return fail(res, 'File is required');
+        }
+        const result = await PaymentService.verifyPayment(verificationId, file);
+        return ok(res, result, 200);
+    }
+    catch (error) {
+        if (error instanceof Error && error.message.includes('not found')) {
+            return fail(res, error.message, 404);
+        }
+        next(error);
+    }
+}
+async function analyseScreenshot(req, res, next) {
+    try {
+        const parsedData = AnalyseScreenshotSchema.safeParse(req.body);
+        if (!parsedData.success) {
+            return fail(res, parsedData.error.issues.map(e => e.message).join(', '));
+        }
+        const file = req.file;
+        if (!file) {
+            return fail(res, 'Screenshot file is required');
+        }
+        const result = await PaymentService.analyseTransfer(file, parsedData.data);
+        return ok(res, result, 200);
+    }
+    catch (error) {
+        next(error);
     }
 }
 //# sourceMappingURL=payment.controller.js.map

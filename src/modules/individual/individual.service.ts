@@ -9,37 +9,37 @@ import { TransactionSession } from '../../models/transactionSession.model';
 
 export interface CreateIndividualProfileDTO {
     fullName: string;
-    bvn: string;
-    ninNumber?: string;
-    bankAccount: string;
-    bankCode: string;
-    phoneNumber: string;
-    dateOfBirth: string;
-    email?: string;
+    bvn?: string | undefined;
+    ninNumber?: string | undefined;
+    bankAccount?: string | undefined;
+    bankCode?: string | undefined;
+    phoneNumber?: string | undefined;
+    dateOfBirth?: string | undefined;
+    email?: string | undefined;
     passwordRaw: string;
 }
 
 export async function createIndividualProfile(dto: CreateIndividualProfileDTO): Promise<IIndividualProfile> {
-    const existing = await IndividualProfile.findOne({ phoneNumber: dto.phoneNumber });
-    if (existing) {
-        throw new Error(`An individual profile with phone number ${dto.phoneNumber} already exists`);
+    if (dto.phoneNumber) {
+        const existing = await IndividualProfile.findOne({ phoneNumber: dto.phoneNumber });
+        if (existing) {
+            throw new Error(`An individual profile with phone number ${dto.phoneNumber} already exists`);
+        }
     }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(dto.passwordRaw, salt);
 
-    const encryptedBvn = encrypt(dto.bvn);
-
     const profile = await IndividualProfile.create({
         fullName: dto.fullName,
-        bvn: encryptedBvn,
-        bankAccount: dto.bankAccount,
-        bankCode: dto.bankCode,
-        phoneNumber: dto.phoneNumber,
-        dateOfBirth: new Date(dto.dateOfBirth),
+        passwordHash,
+        ...(dto.bvn !== undefined && { bvn: encrypt(dto.bvn) }),
+        ...(dto.bankAccount !== undefined && { bankAccount: dto.bankAccount }),
+        ...(dto.bankCode !== undefined && { bankCode: dto.bankCode }),
+        ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
+        ...(dto.dateOfBirth !== undefined && { dateOfBirth: new Date(dto.dateOfBirth) }),
         ...(dto.ninNumber !== undefined && { ninNumber: dto.ninNumber }),
         ...(dto.email !== undefined && { email: dto.email }),
-        passwordHash,
     });
 
     const profileObj = profile.toObject();

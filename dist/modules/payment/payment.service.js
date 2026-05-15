@@ -9,14 +9,19 @@ exports.getVendorPayments = getVendorPayments;
 exports.lookupAccount = lookupAccount;
 exports.fundTransfer = fundTransfer;
 exports.processWebhook = processWebhook;
+exports.analyseTransfer = analyseTransfer;
+exports.verifyPayment = verifyPayment;
 const axios_1 = __importDefault(require("axios"));
 const crypto_1 = __importDefault(require("crypto"));
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const env_1 = require("../../config/env");
 const verification_model_1 = require("../../models/verification.model");
 const verificationRequest_model_1 = require("../../models/verificationRequest.model");
 const auditLog_model_1 = require("../../models/auditLog.model");
 const wallet_service_1 = require("../wallet/wallet.service");
 const vendorProfile_model_1 = require("../../models/vendorProfile.model");
+const transferScreenshotAnalyser_1 = require("../../ai/transferScreenshotAnalyser");
 const MERCHAT_ID = env_1.env.SQUAD_MERCHANT_ID;
 async function initiatePayment(dto) {
     const verification = await verification_model_1.Verification.findById(dto.verificationId);
@@ -252,5 +257,55 @@ async function processWebhook(payload, signature) {
         referenceId: String(verification._id),
         metadata: { transaction_ref, status, rawPayload: payload },
     });
+}
+async function analyseTransfer(file, claimedDetails) {
+    try {
+        const screenshot = file.buffer;
+        const mediaType = file.mimetype;
+        const result = await (0, transferScreenshotAnalyser_1.analyseTransferScreenshot)(screenshot.toString('base64'), mediaType, {
+            amount: claimedDetails.amount,
+            senderName: claimedDetails.senderName,
+            date: claimedDetails.date,
+        });
+        const filename = `manual-${Date.now()}.png`;
+        const uploadDir = path_1.default.join(__dirname, '..', '..', 'uploads', 'screenshots');
+        if (!fs_1.default.existsSync(uploadDir)) {
+            fs_1.default.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filepath = path_1.default.join(uploadDir, filename);
+        fs_1.default.writeFileSync(filepath, screenshot);
+        return {
+            screenshot: filename,
+            result,
+        };
+    }
+    catch (error) {
+        throw error;
+    }
+}
+async function verifyPayment(verificationId, file) {
+    try {
+        const verificationRequest = await verificationRequest_model_1.VerificationRequest.findById(verificationId);
+        if (!verificationRequest) {
+            throw new Error('Verification request not found');
+        }
+        const analysis = await analyseTransfer(file, {
+            amount: verificationRequest.paymentAmount,
+            senderName: verificationRequest.senderName,
+            date: verificationRequest.paymentDate,
+        });
+        // Update verification status
+        await verification_model_1.Verification.findByIdAndUpdate(verificationId, {
+            verdict: analysis.result.verdict,
+            trustScore: analysis.result.authenticityScore,
+        });
+        return {
+            verificationId,
+            ...analysis,
+        };
+    }
+    catch (error) {
+        throw error;
+    }
 }
 //# sourceMappingURL=payment.service.js.map

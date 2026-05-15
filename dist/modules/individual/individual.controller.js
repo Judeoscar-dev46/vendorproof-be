@@ -52,12 +52,14 @@ exports.uploadVerificationFiles = upload.fields([
 ]);
 const CreateProfileSchema = zod_1.z.object({
     fullName: zod_1.z.string().min(2, 'Full name is required'),
-    bvn: zod_1.z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits'),
+    bvn: zod_1.z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits').optional(),
     ninNumber: zod_1.z.string().regex(/^\d{11}$/, 'NIN must be exactly 11 digits').optional(),
-    bankAccount: zod_1.z.string().regex(/^\d{10}$/, 'Bank account must be exactly 10 digits'),
-    bankCode: zod_1.z.string().min(3, 'Bank code is required'),
-    phoneNumber: zod_1.z.string().regex(/^(\+234|0)(70[0-9]|80[0-9]|81[0-9]|90[0-9]|91[0-9])\d{7}$/, 'Phone number must be a valid Nigerian format'),
+    bankAccount: zod_1.z.string().regex(/^\d{10}$/, 'Bank account must be exactly 10 digits').optional(),
+    bankCode: zod_1.z.string().min(3, 'Bank code is required').optional(),
+    phoneNumber: zod_1.z.string().regex(/^(\+234|0)(70[0-9]|80[0-9]|81[0-9]|90[0-9]|91[0-9])\d{7}$/, 'Phone number must be a valid Nigerian format').optional(),
     dateOfBirth: zod_1.z.string().transform((v, ctx) => {
+        if (!v)
+            return undefined;
         const dmyMatch = v.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
         if (dmyMatch) {
             const isoStr = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
@@ -69,7 +71,7 @@ const CreateProfileSchema = zod_1.z.object({
             return v;
         ctx.addIssue({ code: zod_1.z.ZodIssueCode.custom, message: 'Invalid date. Use DD/MM/YYYY or YYYY-MM-DD' });
         return zod_1.z.NEVER;
-    }),
+    }).optional(),
     email: zod_1.z.string().email('Invalid email').optional(),
     password: zod_1.z.string().min(8, 'Password must be at least 8 characters'),
 });
