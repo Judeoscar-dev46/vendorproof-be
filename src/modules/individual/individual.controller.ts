@@ -12,15 +12,16 @@ export const uploadVerificationFiles = upload.fields([
 
 const CreateProfileSchema = z.object({
     fullName: z.string().min(2, 'Full name is required'),
-    bvn: z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits'),
+    bvn: z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits').optional(),
     ninNumber: z.string().regex(/^\d{11}$/, 'NIN must be exactly 11 digits').optional(),
-    bankAccount: z.string().regex(/^\d{10}$/, 'Bank account must be exactly 10 digits'),
-    bankCode: z.string().min(3, 'Bank code is required'),
+    bankAccount: z.string().regex(/^\d{10}$/, 'Bank account must be exactly 10 digits').optional(),
+    bankCode: z.string().min(3, 'Bank code is required').optional(),
     phoneNumber: z.string().regex(
         /^(\+234|0)(70[0-9]|80[0-9]|81[0-9]|90[0-9]|91[0-9])\d{7}$/,
         'Phone number must be a valid Nigerian format'
-    ),
+    ).optional(),
     dateOfBirth: z.string().transform((v, ctx) => {
+        if (!v) return undefined;
         const dmyMatch = v.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
         if (dmyMatch) {
             const isoStr = `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
@@ -31,7 +32,7 @@ const CreateProfileSchema = z.object({
 
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid date. Use DD/MM/YYYY or YYYY-MM-DD' });
         return z.NEVER;
-    }),
+    }).optional(),
     email: z.string().email('Invalid email').optional(),
     password: z.string().min(8, 'Password must be at least 8 characters'),
 });

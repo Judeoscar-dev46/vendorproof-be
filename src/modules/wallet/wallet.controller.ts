@@ -10,11 +10,19 @@ import {
 const CreateWalletSchema = z.object({
     ownerId: z.string().min(1, 'Owner ID is required'),
     ownerType: z.enum(['individual', 'institution']),
-    bvn: z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits').optional(),
+    bvn: z.string().regex(/^\d{11}$/, 'BVN must be exactly 11 digits'),
     address: z.string().min(5, 'Address is required'),
     gender: z.enum(['male', 'female']),
     email: z.string().email('Invalid email').optional(),
     accountNumber: z.string().regex(/^\d{10}$/, 'Account number must be 10 digits').optional(),
+    phoneNumber: z.string().regex(
+        /^(\+234|0)(70[0-9]|80[0-9]|81[0-9]|90[0-9]|91[0-9])\d{7}$/,
+        'Phone number must be a valid Nigerian format'
+    ).optional(),
+    dateOfBirth: z.string().optional(),
+    ninNumber: z.string().regex(/^\d{11}$/, 'NIN must be exactly 11 digits').optional(),
+    bankAccount: z.string().regex(/^\d{10}$/, 'Bank account must be exactly 10 digits').optional(),
+    bankCode: z.string().optional(),
 });
 
 const SimulateFundingSchema = z.object({
@@ -37,13 +45,7 @@ export const createWallet = async (req: Request, res: Response, next: NextFuncti
             return fail(res, parsed.error.issues.map(e => e.message).join(', '));
         }
 
-        const { accountNumber, bvn, email, ...required } = parsed.data;
-        const wallet = await createWalletService({
-            ...required,
-            ...(accountNumber !== undefined && { accountNumber }),
-            ...(bvn !== undefined && { bvn }),
-            ...(email !== undefined && { email }),
-        });
+        const wallet = await createWalletService(parsed.data);
 
         return res.status(201).json({ success: true, data: wallet, message: 'Wallet created successfully' });
     } catch (err: unknown) {

@@ -12,11 +12,16 @@ import { env } from '../../config/env';
 interface WalletData {
     ownerId: string;
     ownerType: 'individual' | 'institution';
-    bvn?: string;
+    bvn: string;
     address: string;
     gender: string;
-    email?: string;
-    accountNumber?: string;
+    email?: string | undefined;
+    accountNumber?: string | undefined;
+    phoneNumber?: string | undefined;
+    dateOfBirth?: string | undefined;
+    ninNumber?: string | undefined;
+    bankAccount?: string | undefined;
+    bankCode?: string | undefined;
 }
 
 function formatDOB(dob: string) {
@@ -46,17 +51,35 @@ export async function createWallet(walletData: WalletData): Promise<IWallet> {
     let businessName: string | undefined;
 
     if (walletData.ownerType === 'individual') {
-        const profile = await IndividualProfile.findById(walletData.ownerId).select('+bvn');
+        const profile = await IndividualProfile.findById(walletData.ownerId);
         if (!profile) throw new Error('Individual profile not found');
 
-        const parts = profile.fullName.trim().split(/\s+/);
+        const update: Record<string, any> = {};
+        if (walletData.bvn) update.bvn = encrypt(walletData.bvn);
+        if (walletData.phoneNumber) update.phoneNumber = walletData.phoneNumber;
+        if (walletData.dateOfBirth) update.dateOfBirth = moment(walletData.dateOfBirth, 'DD/MM/YYYY').toDate();
+        if (walletData.ninNumber) update.ninNumber = walletData.ninNumber;
+        if (walletData.bankAccount) update.bankAccount = walletData.bankAccount;
+        if (walletData.bankCode) update.bankCode = walletData.bankCode;
+
+        if (Object.keys(update).length > 0) {
+            await IndividualProfile.findByIdAndUpdate(walletData.ownerId, update);
+        }
+
+        const updatedProfile = await IndividualProfile.findById(walletData.ownerId).select('+bvn');
+        if (!updatedProfile) throw new Error('Failed to retrieve updated profile');
+
+        const parts = updatedProfile.fullName.trim().split(/\s+/);
         firstName = parts[0] || '';
         lastName = parts.slice(1).join(' ') || parts[0] || '';
-        email = profile.email || walletData.email || '';
-        bvn = decrypt(profile.bvn);
-        mobileNumber = profile.phoneNumber;
+        email = updatedProfile.email || walletData.email || '';
+        bvn = walletData.bvn || (updatedProfile.bvn ? decrypt(updatedProfile.bvn) : '');
+        mobileNumber = updatedProfile.phoneNumber || walletData.phoneNumber || '';
 
-        const dob = moment(profile.dateOfBirth).format('DD/MM/YYYY');
+        if (!bvn) throw new Error('BVN is required for wallet creation');
+        if (!mobileNumber) throw new Error('Phone number is required for wallet creation');
+
+        const dob = moment(updatedProfile.dateOfBirth).format('DD/MM/YYYY');
 
         if (!email) throw new Error('Email is required to create a wallet');
 
