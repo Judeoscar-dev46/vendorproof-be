@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, optionalAuthenticate } from '../../middleware/auth';
 import {
     createSession,
     joinSession,
@@ -23,7 +23,7 @@ router.post('/:sessionCode/verify', authenticate, uploadVerificationFiles, submi
 
 router.post('/:sessionCode/consent', authenticate, giveConsent);
 
-router.get('/:sessionCode/status', getSessionStatus);
+router.get('/:sessionCode/status', optionalAuthenticate, getSessionStatus);
 
 // Guest Routes
 router.get('/:sessionCode/details', getDetails);

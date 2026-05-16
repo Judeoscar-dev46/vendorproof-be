@@ -201,7 +201,7 @@ export async function getSessionStatus(req: Request, res: Response, next: NextFu
 
         const result = await SessionService.getSessionStatus(
             req.params.sessionCode as string,
-            parsed.data.profileId || parsed.data.guestToken || ''
+            req.user?.userId || parsed.data.profileId || parsed.data.guestToken || ''
         );
         return ok(res, result);
     } catch (err: unknown) {
