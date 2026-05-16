@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import insightface
 from insightface.app import FaceAnalysis
 import uvicorn
+import fitz  # PyMuPDF
 
 app = FastAPI(title="VendorProof Face AI Sidecar")
 
@@ -23,7 +24,32 @@ def decode_image(b64_string):
         # Strip header if present
         if "," in b64_string:
             b64_string = b64_string.split(",")[1]
+        
         img_data = base64.b64decode(b64_string)
+
+        # Check if it's a PDF (%PDF-)
+        if img_data.startswith(b"%PDF-"):
+            # Convert first page of PDF to image
+            doc = fitz.open(stream=img_data, filetype="pdf")
+            page = doc.load_page(0)  # first page
+            
+            # Increase resolution for better face detection (300 DPI)
+            zoom = 300 / 72
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Convert to numpy array for OpenCV
+            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+            
+            # Convert RGB to BGR for OpenCV
+            if pix.n == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            elif pix.n == 4:
+                img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+            
+            doc.close()
+            return img
+
         nparr = np.frombuffer(img_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:

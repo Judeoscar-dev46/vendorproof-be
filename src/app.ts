@@ -40,9 +40,20 @@ app.use('/api/audit-logs', auditLogRouter);
 
 app.use(errorHandler);
 
+import { IndividualProfile } from './models/individualProfile.model';
+
 mongoose.connect(env.MONGODB_URI)
-    .then(() => {
+    .then(async () => {
         console.log('MongoDB connected');
+        
+        // Ensure sparse index is applied correctly
+        try {
+            await IndividualProfile.syncIndexes();
+            console.log('IndividualProfile indexes synced');
+        } catch (err) {
+            console.error('Error syncing indexes:', err);
+        }
+
         startExpiryJob();
         app.listen(env.PORT, () => console.log(`VendorProof API running on port: ${env.PORT}`));
     })
