@@ -21,7 +21,6 @@ export async function matchFace(idBase64: string, selfieBase64: string): Promise
 
         return response.data;
     } catch (err: any) {
-        console.log(err)
         console.error('Face Analysis Error:', err.response?.data || err.message);
         return {
             match: false,

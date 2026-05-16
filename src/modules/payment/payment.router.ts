@@ -13,7 +13,7 @@ import { authenticate } from '../../middleware/auth';
 
 const router = Router();
 
-router.get('/banks', authenticate, getBanks);
+router.get('/banks', getBanks);
 router.post('/webhook', handleSquadWebhook);
 
 router.post('/release', authenticate, initiatePayment);

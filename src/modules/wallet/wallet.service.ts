@@ -59,7 +59,7 @@ export async function createWallet(walletData: WalletData): Promise<IWallet> {
         if (walletData.phoneNumber) update.phoneNumber = walletData.phoneNumber;
         if (walletData.dateOfBirth) update.dateOfBirth = moment(walletData.dateOfBirth, 'DD/MM/YYYY').toDate();
         if (walletData.ninNumber) update.ninNumber = walletData.ninNumber;
-        if (walletData.bankAccount) update.bankAccount = walletData.bankAccount;
+        if (walletData.bankAccount) update.bankAccount = walletData.accountNumber;
         if (walletData.bankCode) update.bankCode = walletData.bankCode;
 
         if (Object.keys(update).length > 0) {

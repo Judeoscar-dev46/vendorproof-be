@@ -23,7 +23,6 @@ export async function runVerification(
         Promise.resolve(scoreAnomaly(vendor, invoiceAmount)),
         analyseNetwork(vendorId, vendor.bankAccount, vendor.directorBvn, vendor.address),
     ]);
-    console.log(docResult, anomalyResult, networkResult, "Results")
 
     const aggregated = aggregateScores(docResult, anomalyResult, networkResult);
 
