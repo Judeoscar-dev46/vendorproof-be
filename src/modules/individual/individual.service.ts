@@ -81,12 +81,12 @@ export async function verifyIndividualProfileStandAlone(
     const profile = await IndividualProfile.findById(id).select('+bvn +ninNumber +bankAccount');
     if (!profile) throw new Error('Individual profile not found');
 
-    // if (profile.lastVerifiedAt) {
-    //     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    //     if (profile.lastVerifiedAt > oneDayAgo) {
-    //         throw new Error('You can only perform identity verification once every 24 hours');
-    //     }
-    // }
+    if (profile.lastVerifiedAt) {
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        if (profile.lastVerifiedAt > oneDayAgo) {
+            throw new Error('You can only perform identity verification once every 24 hours');
+        }
+    }
 
     const result = await runIndividualVerification(profile, documentBase64, selfieBase64, mediaType);
 
